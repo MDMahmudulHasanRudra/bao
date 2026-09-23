@@ -1,12 +1,29 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 import { getDb } from '../../db/index.js';
 import { organizations } from '../../db/schema.js';
 import { eq } from 'drizzle-orm';
-import { NotFoundError } from '../../core/errors/http.js';
+import { NotFoundError, ValidationError } from '../../core/errors/http.js';
 import { getTenant, requirePermission } from '../../core/tenancy/context.js';
 import { audit } from '../audit/service.js';
 
 const settings = new Hono();
+
+/**
+ * C4: organizations.settings accepts a known shape only —
+ * unknown keys and wrong types are rejected (not silently stripped).
+ */
+export const orgSettingsSchema = z
+  .object({
+    companyName: z.string().min(1).max(255).optional(),
+    industry: z.string().max(255).optional(),
+    website: z.union([z.string().url(), z.literal('')]).optional(),
+    timezone: z.string().max(64).optional(),
+    currency: z.string().min(3).max(8).optional(),
+    defaultLeadValue: z.number().int().nonnegative().optional(),
+    notificationEmail: z.union([z.string().email(), z.literal('')]).optional(),
+  })
+  .strict();
 
 settings.get('/', async (c) => {
   const tenant = getTenant(c);
@@ -26,17 +43,38 @@ settings.get('/', async (c) => {
 settings.put('/', requirePermission('org.settings.manage'), async (c) => {
   const tenant = getTenant(c);
   const db = getDb();
-  const body = await c.req.json<{ settings: Record<string, unknown> }>();
+  const body = await c.req.json<{ settings: unknown }>().catch(() => null);
+
+  if (
+    !body ||
+    typeof body.settings !== 'object' ||
+    body.settings === null ||
+    Array.isArray(body.settings)
+  ) {
+    throw new ValidationError({ settings: 'settings object is required' });
+  }
+
+  const parsed = orgSettingsSchema.safeParse(body.settings);
+  if (!parsed.success) {
+    const details: Record<string, string> = {};
+    for (const issue of parsed.error.issues) {
+      const key = issue.path.join('.') || 'settings';
+      details[key] = issue.message;
+    }
+    throw new ValidationError(details);
+  }
 
   const [updated] = await db
     .update(organizations)
-    .set({ settings: body.settings, updatedAt: new Date() })
+    .set({ settings: parsed.data, updatedAt: new Date() })
     .where(eq(organizations.id, tenant.organizationId))
     .returning();
 
   if (!updated) throw new NotFoundError('Organization');
 
-  await audit(c, 'settings.update', 'organization', tenant.organizationId);
+  await audit(c, 'settings.update', 'organization', tenant.organizationId, {
+    keys: Object.keys(parsed.data),
+  });
 
   return c.json({ settings: updated.settings });
 });

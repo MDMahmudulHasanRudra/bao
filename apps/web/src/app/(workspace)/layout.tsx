@@ -29,6 +29,7 @@ const ICONS: Record<string, string[]> = {
   ],
   presentations: ['M2 3h20v14H2z', 'M8 21h8', 'M12 17v4'],
   intelligence: ['M22 12h-4l-3 9L9 3l-3 9H2'],
+  analytics: ['M3 3v18h18', 'M7 14l4-4 4 4 5-6'],
   settings: [
     'M4 21v-7',
     'M4 10V3',
@@ -71,7 +72,9 @@ const NAV = [
   { href: '/proposals', label: 'Proposals', moduleId: 'proposals' },
   { href: '/presentations', label: 'Presentations', moduleId: 'presentations' },
   { href: '/intelligence', label: 'Monitoring', moduleId: 'intelligence' },
+  { href: '/analytics', label: 'Analytics', moduleId: 'analytics' },
   { href: '/settings/ai-providers', label: 'AI Providers', moduleId: 'settings' },
+  { href: '/settings/organization', label: 'Organization', moduleId: 'settings' },
   { href: '/settings/audit', label: 'Audit Log', moduleId: 'settings' },
 ];
 

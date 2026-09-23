@@ -1,8 +1,12 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 import { getDb } from '../../db/index.js';
 import { leads, knowledgeSources } from '../../db/schema.js';
 import { eq, and, sql, isNull } from 'drizzle-orm';
 import { getTenant } from '../../core/tenancy/context.js';
+import { ValidationError } from '../../core/errors/http.js';
+import { audit } from '../audit/service.js';
+import { createComparisonJob } from '../../integrations/diffy/adapter.js';
 
 const analytics = new Hono();
 
@@ -50,6 +54,48 @@ analytics.get('/knowledge', async (c) => {
     );
 
   return c.json({ stats });
+});
+
+const compareBody = z.object({
+  contentA: z.string().min(1).max(20000),
+  contentB: z.string().min(1).max(20000),
+  type: z.enum(['text', 'code', 'document']).default('text'),
+});
+
+// Diffy comparison — audited; mock result when Diffy is not configured
+analytics.post('/compare', async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const parsed = compareBody.safeParse(body);
+  if (!parsed.success) {
+    const details: Record<string, string> = {};
+    for (const issue of parsed.error.issues) {
+      details[issue.path.join('.') || 'body'] = issue.message;
+    }
+    throw new ValidationError(details);
+  }
+
+  const result = await createComparisonJob({
+    contentA: parsed.data.contentA,
+    contentB: parsed.data.contentB,
+    type: parsed.data.type,
+  });
+
+  const isMock = result.jobId.startsWith('mock-');
+
+  await audit(c, 'diffy.compare', 'analytics_compare', result.jobId, {
+    type: parsed.data.type,
+    status: result.status,
+    score: result.score,
+    mock: isMock,
+  });
+
+  return c.json({
+    comparison: {
+      ...result,
+      mock: isMock,
+      ...(isMock ? { note: 'Diffy not configured — mock comparison' } : {}),
+    },
+  });
 });
 
 export default analytics;

@@ -82,7 +82,7 @@ export const MODULE_REGISTRY: ModuleConfig[] = [
     description: 'Business analytics and reporting',
     enabled: true,
     comingSoon: false,
-    uiAvailable: false,
+    uiAvailable: true,
   },
   {
     id: 'settings',

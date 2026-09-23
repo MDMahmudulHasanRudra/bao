@@ -35,7 +35,7 @@ import moduleRegistry from '../../apps/api/src/modules/module-registry/routes.js
 import intelligence from '../../apps/api/src/modules/intelligence/routes.js';
 import { getDb } from '../../apps/api/src/db/index.js';
 
-const SHELL_IDS = ['analytics'];
+const SHELL_IDS: string[] = [];
 
 function buildApp(role: string) {
   const mockDb = {
@@ -100,6 +100,7 @@ describe('module registry truth (P0-2)', () => {
     expect(MODULE_REGISTRY.find((m) => m.id === 'proposals')?.uiAvailable).toBe(true);
     expect(MODULE_REGISTRY.find((m) => m.id === 'presentations')?.uiAvailable).toBe(true);
     expect(MODULE_REGISTRY.find((m) => m.id === 'intelligence')?.uiAvailable).toBe(true);
+    expect(MODULE_REGISTRY.find((m) => m.id === 'analytics')?.uiAvailable).toBe(true);
   });
 
   it('comingSoon modules are not uiAvailable', () => {
@@ -539,6 +540,64 @@ describe('intelligence UI + scrape cycle (P2-2)', () => {
   it('ScrapLink adapter exposes mock path when unconfigured (manual cycle)', () => {
     const src = readFileSync(scraplinkPath, 'utf-8');
     expect(src).toMatch(/SCRAPLINK_API_URL/);
+    expect(src).toMatch(/mock-\$\{Date\.now\(\)\}/);
+    expect(src).toMatch(/not configured/i);
+  });
+});
+
+describe('analytics + dashboard insight + Diffy + settings (P2-3)', () => {
+  const analyticsPage = resolve(__dirname, '../../apps/web/src/app/(workspace)/analytics/page.tsx');
+  const analyticsRoutes = resolve(__dirname, '../../apps/api/src/modules/analytics/routes.ts');
+  const settingsRoutes = resolve(__dirname, '../../apps/api/src/modules/settings/routes.ts');
+  const dashboardPage = resolve(__dirname, '../../apps/web/src/app/(workspace)/dashboard/page.tsx');
+  const diffyPath = resolve(__dirname, '../../apps/api/src/integrations/diffy/adapter.ts');
+
+  it('analytics page has real metrics, empty states, loading/error, Diffy compare', () => {
+    const src = readFileSync(analyticsPage, 'utf-8');
+    expect(src).toMatch(/\/api\/v1\/analytics\/sales/);
+    expect(src).toMatch(/\/api\/v1\/analytics\/knowledge/);
+    expect(src).toMatch(/\/api\/v1\/analytics\/compare/);
+    expect(src).toMatch(/Loading analytics/);
+    expect(src).toMatch(/role="alert"/);
+    expect(src).toMatch(/Retry/);
+    expect(src).toMatch(/No leads yet/);
+    expect(src).toMatch(/No knowledge sources yet/);
+    expect(src).toMatch(/Source:/);
+    expect(src).toMatch(/Run comparison/);
+    expect(src).toMatch(/role="status"/);
+  });
+
+  it('analytics routes keep org-scoped metrics and audited Diffy compare', () => {
+    const src = readFileSync(analyticsRoutes, 'utf-8');
+    expect(src).toMatch(/eq\(leads\.organizationId, tenant\.organizationId\)/);
+    expect(src).toMatch(/eq\(knowledgeSources\.organizationId, tenant\.organizationId\)/);
+    expect(src).toMatch(/createComparisonJob\(/);
+    expect(src).toMatch(/audit\(c,\s*'diffy\.compare'/);
+    expect(src).toMatch(/contentA/);
+    expect(src).toMatch(/type: z\.enum\(\['text', 'code', 'document'\]\)/);
+  });
+
+  it('settings PUT validates known org shape (fixes C4)', () => {
+    const src = readFileSync(settingsRoutes, 'utf-8');
+    expect(src).toMatch(/orgSettingsSchema/);
+    expect(src).toMatch(/\.strict\(\)/);
+    expect(src).toMatch(/safeParse/);
+    expect(src).toMatch(/ValidationError/);
+    expect(src).toMatch(/audit\(c,\s*'settings\.update'/);
+  });
+
+  it('dashboard has Ask Business AI entry and evidence-backed insight cards', () => {
+    const src = readFileSync(dashboardPage, 'utf-8');
+    expect(src).toMatch(/Ask Business AI/);
+    expect(src).toMatch(/\/assistant/);
+    expect(src).toMatch(/Source:/);
+    expect(src).toMatch(/freshness|Updated|Collected/i);
+    expect(src).toMatch(/No leads yet|empty/i);
+  });
+
+  it('Diffy adapter exposes mock path when unconfigured', () => {
+    const src = readFileSync(diffyPath, 'utf-8');
+    expect(src).toMatch(/DIFFY_API_URL/);
     expect(src).toMatch(/mock-\$\{Date\.now\(\)\}/);
     expect(src).toMatch(/not configured/i);
   });

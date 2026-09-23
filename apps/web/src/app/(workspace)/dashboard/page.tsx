@@ -77,23 +77,45 @@ export default function DashboardPage() {
   const won = data?.pipeline.find((p) => p.stage === 'closed_won')?.count ?? 0;
   const knowledge = data?.knowledgeStats.totalSources ?? 0;
   const ready = data?.knowledgeStats.readySources ?? 0;
+  const stats = [
+    { label: 'Total Leads', value: totalLeads, source: 'dashboard · pipeline' },
+    { label: 'Won Deals', value: won, source: 'dashboard · stage=closed_won' },
+    { label: 'Knowledge Assets', value: knowledge, source: 'dashboard · knowledge' },
+    {
+      label: 'AI Chats',
+      value: data?.aiConversationsCount ?? 0,
+      source: 'dashboard · conversations',
+    },
+  ];
+
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
 
-  const stats = [
-    { label: 'Total Leads', value: totalLeads },
-    { label: 'Won Deals', value: won },
-    { label: 'Knowledge Assets', value: knowledge },
-    { label: 'AI Chats', value: data?.aiConversationsCount ?? 0 },
-  ];
-
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-slate-900">
-          {greeting}, {user?.name?.split(' ')[0] || 'there'}! 👋
-        </h1>
-        <p className="mt-1 text-sm text-slate-500">Here&apos;s what&apos;s happening today.</p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900">
+            {greeting}, {user?.name?.split(' ')[0] || 'there'}! 👋
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">Here&apos;s what&apos;s happening today.</p>
+        </div>
+        <Link
+          href="/assistant"
+          className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700"
+        >
+          <svg
+            aria-hidden
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.75"
+            className="h-4 w-4"
+          >
+            <path d="m12 3 1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8L12 3z" />
+          </svg>
+          Ask Business AI
+        </Link>
       </div>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Key metrics">
@@ -101,16 +123,21 @@ export default function DashboardPage() {
           <div key={s.label} className="rounded-xl border border-slate-200 bg-white p-4">
             <p className="text-xs font-medium text-slate-500">{s.label}</p>
             <p className="mt-2 text-3xl font-semibold text-slate-900">{s.value}</p>
+            <p className="mt-1 text-[11px] text-slate-400">
+              {s.value === 0 ? 'No data yet' : `Source: ${s.source} · just now`}
+            </p>
           </div>
         ))}
       </section>
 
       <section className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-xl border border-slate-200 bg-[#0b1220] p-5 text-slate-100">
+        <div className="rounded-xl border border-slate-200 bg-white p-5">
           <div className="mb-4 flex items-center justify-between">
             <div>
               <h2 className="font-semibold">Sales Pipeline</h2>
-              <p className="text-xs text-slate-400">Deal stage distribution</p>
+              <p className="text-xs text-slate-400">
+                Source: dashboard · leads by stage · freshness: live
+              </p>
             </div>
           </div>
           <ul className="space-y-2">
@@ -120,7 +147,7 @@ export default function DashboardPage() {
               data!.pipeline.map((row) => (
                 <li
                   key={row.stage}
-                  className="flex items-center justify-between rounded-lg bg-slate-800/60 px-3 py-2 text-sm"
+                  className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm"
                 >
                   <span>{STAGE_LABELS[row.stage] || row.stage}</span>
                   <span className="font-medium">
@@ -135,7 +162,10 @@ export default function DashboardPage() {
 
         <div className="rounded-xl border border-slate-200 bg-white p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-semibold text-slate-900">Recent Activity</h2>
+            <div>
+              <h2 className="font-semibold text-slate-900">Recent Activity</h2>
+              <p className="text-xs text-slate-400">Source: activities · freshness: latest 5</p>
+            </div>
             <span className="text-xs text-slate-500">Unread: {data?.unreadNotifications ?? 0}</span>
           </div>
           <ul className="divide-y divide-slate-100">
@@ -163,6 +193,9 @@ export default function DashboardPage() {
           <h2 className="font-semibold text-slate-900">Knowledge Hub</h2>
           <p className="mt-3 text-3xl font-semibold text-slate-900">{ready}</p>
           <p className="text-sm text-slate-500">ready of {knowledge} sources</p>
+          <p className="mt-1 text-[11px] text-slate-400">
+            {knowledge === 0 ? 'No sources yet' : 'Source: knowledge · freshness: live'}
+          </p>
           <Link
             href="/knowledge"
             className="mt-4 inline-block text-sm font-medium text-indigo-600 hover:text-indigo-700"
@@ -207,6 +240,11 @@ export default function DashboardPage() {
             {data?.aiConversationsCount ?? 0}
           </p>
           <p className="text-sm text-slate-500">conversations</p>
+          <p className="mt-1 text-[11px] text-slate-400">
+            {(data?.aiConversationsCount ?? 0) === 0
+              ? 'No conversations yet — ask a question'
+              : 'Source: ai_conversations · freshness: live'}
+          </p>
         </div>
       </section>
 
