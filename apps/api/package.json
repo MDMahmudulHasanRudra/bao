@@ -1,0 +1,50 @@
+{
+  "name": "@bao/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "typecheck": "tsc --noEmit",
+    "db:migrate": "drizzle-kit migrate",
+    "db:migrate:node": "node dist/db/migrate.js",
+    "db:generate": "drizzle-kit generate",
+    "db:seed": "tsx src/db/seed.ts",
+    "db:seed:prod": "node dist/db/seed.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.650.0",
+    "@aws-sdk/s3-request-presigner": "^3.650.0",
+    "@bao/config": "workspace:*",
+    "@bao/contracts": "workspace:*",
+    "@hono/node-server": "^1.13.2",
+    "bcryptjs": "^2.4.3",
+    "bullmq": "^5.12.9",
+    "date-fns": "^3.6.0",
+    "drizzle-orm": "^0.45.3",
+    "hono": "^4.6.3",
+    "ioredis": "^5.4.1",
+    "jsonwebtoken": "^9.0.2",
+    "mammoth": "^1.12.3",
+    "nanoid": "^5.0.7",
+    "pdf-parse": "^1.1.1",
+    "pino": "^9.4.0",
+    "pino-pretty": "^11.2.2",
+    "postgres": "^3.4.4",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.7",
+    "@types/node": "^22.8.0",
+    "@types/pdf-parse": "^1.1.5",
+    "drizzle-kit": "^0.31.11",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.3"
+  }
+}

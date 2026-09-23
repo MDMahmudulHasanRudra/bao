@@ -1,0 +1,54 @@
+{
+  "name": "business-ai-os",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@9.12.2",
+  "scripts": {
+    "dev": "concurrently \"pnpm --filter @bao/api dev\" \"pnpm --filter @bao/web dev\" \"pnpm --filter @bao/worker dev\"",
+    "dev:api": "pnpm --filter @bao/api dev",
+    "dev:web": "pnpm --filter @bao/web dev",
+    "dev:worker": "pnpm --filter @bao/worker dev",
+    "build": "pnpm --filter @bao/contracts build && concurrently \"pnpm --filter @bao/api build\" \"pnpm --filter @bao/web build\" \"pnpm --filter @bao/worker build\"",
+    "lint": "eslint \"apps/**/src/**/*.{ts,tsx}\" \"packages/**/src/**/*.{ts,tsx}\"",
+    "lint:fix": "eslint \"apps/**/src/**/*.{ts,tsx}\" \"packages/**/src/**/*.{ts,tsx}\" --fix",
+    "format": "prettier --write \"apps/**/src/**/*.{ts,tsx,css}\" \"packages/**/src/**/*.{ts,tsx,css}\"",
+    "format:check": "prettier --check \"apps/**/src/**/*.{ts,tsx,css}\" \"packages/**/src/**/*.{ts,tsx,css}\"",
+    "typecheck": "tsc --build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "db:migrate": "pnpm --filter @bao/api db:migrate",
+    "db:generate": "pnpm --filter @bao/api db:generate",
+    "db:seed": "pnpm --filter @bao/api db:seed",
+    "docker:up": "docker compose -f infra/docker/docker-compose.yml up -d --build",
+    "docker:down": "docker compose -f infra/docker/docker-compose.yml down",
+    "docker:logs": "docker compose -f infra/docker/docker-compose.yml logs -f",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.13.0",
+    "@types/node": "^22.8.0",
+    "bcryptjs": "^2.4.3",
+    "concurrently": "^9.1.0",
+    "drizzle-orm": "^0.45.3",
+    "eslint": "^9.13.0",
+    "eslint-config-prettier": "^9.1.0",
+    "hono": "^4.6.3",
+    "husky": "^9.1.6",
+    "jsonwebtoken": "^9.0.2",
+    "lint-staged": "^15.2.10",
+    "prettier": "^3.3.3",
+    "typescript": "^5.6.3",
+    "typescript-eslint": "^8.11.0",
+    "vitest": "^2.1.3"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml}": [
+      "prettier --write"
+    ]
+  }
+}

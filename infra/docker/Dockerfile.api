@@ -1,0 +1,42 @@
+FROM node:20-alpine AS base
+RUN corepack enable && corepack prepare pnpm@9.12.2 --activate
+
+FROM base AS deps
+WORKDIR /app
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY apps/api/package.json ./apps/api/
+COPY packages/contracts/package.json ./packages/contracts/
+COPY packages/config/package.json ./packages/config/
+RUN pnpm install --frozen-lockfile
+
+FROM base AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
+COPY --from=deps /app/apps/api/package.json ./apps/api/
+COPY --from=deps /app/package.json ./
+COPY --from=deps /app/pnpm-workspace.yaml ./
+COPY --from=deps /app/pnpm-lock.yaml ./
+COPY --from=deps /app/packages/contracts/package.json ./packages/contracts/
+COPY --from=deps /app/packages/config/package.json ./packages/config/
+COPY packages/ ./packages/
+COPY apps/ ./apps/
+COPY tsconfig.base.json ./
+# Host package trees clobber workspace links; re-link before build
+RUN pnpm install --frozen-lockfile
+RUN pnpm --filter @bao/contracts build
+RUN pnpm --filter @bao/config build
+RUN pnpm --filter @bao/api build
+RUN pnpm --filter @bao/api deploy --prod /out
+
+FROM base AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=5000
+RUN addgroup --system --gid 1001 bao && adduser --system --uid 1001 bao
+COPY --from=builder --chown=bao:bao /out ./
+COPY --from=builder --chown=bao:bao /app/apps/api/drizzle ./drizzle
+COPY --from=builder --chown=bao:bao /app/apps/api/drizzle.config.ts ./
+USER bao
+EXPOSE 5000
+CMD ["sh", "-c", "node dist/db/migrate.js && node dist/db/seed.js && node dist/main.js"]

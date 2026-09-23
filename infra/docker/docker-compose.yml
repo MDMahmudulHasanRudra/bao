@@ -1,0 +1,161 @@
+# Full stack: web :3000 · api :5000 · postgres :5432 · redis :6379 · minio :9000/:9001
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: bao-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: bao
+      POSTGRES_PASSWORD: changeme
+      POSTGRES_DB: business_ai_os
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bao -d business_ai_os"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: bao-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    # Docker Hub minio/minio pull may be denied; quay.io mirror works.
+    image: quay.io/minio/minio:latest
+    container_name: bao-minio
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.api
+    container_name: bao-api
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      NODE_ENV: production
+      PORT: "5000"
+      DATABASE_URL: postgresql://bao:changeme@postgres:5432/business_ai_os
+      DATABASE_SSL: "false"
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: dev-only-jwt-secret-change-me-32chars-min!
+      SESSION_SECRET: dev-only-session-secret-change-me-32ch!
+      WEB_URL: http://localhost:3000
+      API_URL: http://localhost:5000
+      STORAGE_ENDPOINT: http://minio:9000
+      STORAGE_BUCKET: business-ai-os
+      STORAGE_ACCESS_KEY: minioadmin
+      STORAGE_SECRET_KEY: minioadmin
+      STORAGE_FORCE_PATH_STYLE: "true"
+      LOG_LEVEL: info
+      LOG_FORMAT: json
+      AI_PROVIDER: openai
+      AI_API_KEY: ${AI_API_KEY:-sk-dev-placeholder}
+      AI_MODEL: gpt-4o-mini
+      AI_EMBEDDING_MODEL: text-embedding-3-small
+      AI_EMBEDDING_DIMENSIONS: "1536"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:5000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.worker
+    container_name: bao-worker
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://bao:changeme@postgres:5432/business_ai_os
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: dev-only-jwt-secret-change-me-32chars-min!
+      SESSION_SECRET: dev-only-session-secret-change-me-32ch!
+      STORAGE_ENDPOINT: http://minio:9000
+      STORAGE_BUCKET: business-ai-os
+      STORAGE_ACCESS_KEY: minioadmin
+      STORAGE_SECRET_KEY: minioadmin
+      STORAGE_FORCE_PATH_STYLE: "true"
+      LOG_LEVEL: info
+      AI_PROVIDER: openai
+      AI_API_KEY: ${AI_API_KEY:-sk-dev-placeholder}
+      AI_MODEL: gpt-4o-mini
+      AI_EMBEDDING_MODEL: text-embedding-3-small
+      AI_EMBEDDING_DIMENSIONS: "1536"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+      api:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.web
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:5000
+    container_name: bao-web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: 0.0.0.0
+      NEXT_PUBLIC_API_URL: http://localhost:5000
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:

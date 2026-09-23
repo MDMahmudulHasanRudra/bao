@@ -1,0 +1,37 @@
+FROM node:20-alpine AS base
+RUN corepack enable && corepack prepare pnpm@9.12.2 --activate
+
+FROM base AS deps
+WORKDIR /app
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY apps/worker/package.json ./apps/worker/
+COPY packages/contracts/package.json ./packages/contracts/
+COPY packages/config/package.json ./packages/config/
+RUN pnpm install --frozen-lockfile
+
+FROM base AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/apps/worker/node_modules ./apps/worker/node_modules
+COPY --from=deps /app/apps/worker/package.json ./apps/worker/
+COPY --from=deps /app/package.json ./
+COPY --from=deps /app/pnpm-workspace.yaml ./
+COPY --from=deps /app/pnpm-lock.yaml ./
+COPY --from=deps /app/packages/contracts/package.json ./packages/contracts/
+COPY --from=deps /app/packages/config/package.json ./packages/config/
+COPY packages/ ./packages/
+COPY apps/worker/ ./apps/worker/
+COPY tsconfig.base.json ./
+RUN pnpm install --frozen-lockfile
+RUN pnpm --filter @bao/contracts build
+RUN pnpm --filter @bao/config build
+RUN pnpm --filter @bao/worker build
+RUN pnpm --filter @bao/worker deploy --prod /out
+
+FROM base AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+RUN addgroup --system --gid 1001 bao && adduser --system --uid 1001 bao
+COPY --from=builder --chown=bao:bao /out ./
+USER bao
+CMD ["node", "dist/main.js"]

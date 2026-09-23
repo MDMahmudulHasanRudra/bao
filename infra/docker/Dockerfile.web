@@ -1,0 +1,49 @@
+FROM node:20-alpine AS base
+RUN corepack enable && corepack prepare pnpm@9.12.2 --activate
+
+FROM base AS deps
+WORKDIR /app
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY apps/web/package.json ./apps/web/
+COPY packages/contracts/package.json ./packages/contracts/
+COPY packages/ui/package.json ./packages/ui/
+COPY packages/config/package.json ./packages/config/
+RUN pnpm install --frozen-lockfile
+
+FROM base AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
+COPY --from=deps /app/apps/web/package.json ./apps/web/
+COPY --from=deps /app/package.json ./
+COPY --from=deps /app/pnpm-workspace.yaml ./
+COPY --from=deps /app/pnpm-lock.yaml ./
+COPY --from=deps /app/packages/contracts/package.json ./packages/contracts/
+COPY --from=deps /app/packages/config/package.json ./packages/config/
+COPY --from=deps /app/packages/ui/package.json ./packages/ui/
+COPY packages/ ./packages/
+COPY apps/web/ ./apps/web/
+COPY tsconfig.base.json ./
+RUN pnpm install --frozen-lockfile
+ENV NEXT_TELEMETRY_DISABLED=1
+# NEXT_PUBLIC_* is inlined at build time (browser hits host-mapped API port)
+ARG NEXT_PUBLIC_API_URL=http://localhost:5000
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+RUN pnpm --filter @bao/contracts build
+RUN pnpm --filter @bao/config build
+RUN pnpm --filter @bao/web build
+
+FROM base AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+RUN addgroup --system --gid 1001 bao && adduser --system --uid 1001 bao
+# Monorepo standalone keeps app root: server.js lives at apps/web/server.js
+COPY --from=builder --chown=bao:bao /app/apps/web/.next/standalone ./
+COPY --from=builder --chown=bao:bao /app/apps/web/.next/static ./apps/web/.next/static
+COPY --from=builder --chown=bao:bao /app/apps/web/public ./apps/web/public
+USER bao
+EXPOSE 3000
+CMD ["node", "apps/web/server.js"]

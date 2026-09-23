@@ -1,0 +1,31 @@
+{
+  "name": "@bao/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.650.0",
+    "@bao/config": "workspace:*",
+    "@bao/contracts": "workspace:*",
+    "bullmq": "^5.12.9",
+    "drizzle-orm": "^0.45.3",
+    "ioredis": "^5.4.1",
+    "mammoth": "^1.12.3",
+    "pdf-parse": "^1.1.1",
+    "pino": "^9.4.0",
+    "pino-pretty": "^11.2.2",
+    "postgres": "^3.4.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.8.0",
+    "@types/pdf-parse": "^1.1.5",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.3"
+  }
+}
