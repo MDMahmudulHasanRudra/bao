@@ -144,7 +144,7 @@ export default function ProposalsPage() {
   }
 
   async function approve(p: Proposal) {
-    if (!window.approve && !window.confirm(`Approve “${p.title}”?`)) return;
+    if (!window.confirm(`Approve “${p.title}”?`)) return;
     setBusy(true);
     setFlash(null);
     try {
