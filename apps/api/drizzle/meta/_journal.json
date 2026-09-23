@@ -8,6 +8,13 @@
       "when": 1790152990498,
       "tag": "0000_dapper_magik",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790176464900,
+      "tag": "0001_slim_ares",
+      "breakpoints": true
     }
   ]
 }

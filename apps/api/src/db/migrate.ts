@@ -41,16 +41,6 @@ async function migrate() {
     `;
     if (row) continue;
 
-    // Existing volume may already have tables from host-side drizzle-kit migrate
-    const [table] = await sql<{ to_regclass: string | null }[]>`
-      SELECT to_regclass('users') AS to_regclass
-    `;
-    if (table?.to_regclass) {
-      await sql`INSERT INTO schema_migrations (name) VALUES (${file}) ON CONFLICT DO NOTHING`;
-      console.log(`Migration already present in DB, recorded: ${file}`);
-      continue;
-    }
-
     const body = readFileSync(join(dir, file), 'utf8');
     await sql.begin(async (tx) => {
       await tx.unsafe(body);

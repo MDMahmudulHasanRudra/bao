@@ -18,7 +18,7 @@ type DashboardData = {
 };
 
 type ModulesPayload = {
-  modules: { id: string; name: string; description: string }[];
+  modules: { id: string; name: string; description: string; uiAvailable?: boolean }[];
   comingSoon: { id: string; name: string; description: string }[];
 };
 
@@ -217,8 +217,14 @@ export default function DashboardPage() {
             <div key={m.id} className="rounded-xl border border-slate-200 bg-white p-4">
               <div className="flex items-start justify-between gap-2">
                 <p className="font-medium text-slate-900">{m.name}</p>
-                <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
-                  Active
+                <span
+                  className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                    m.uiAvailable === false
+                      ? 'bg-slate-100 text-slate-500'
+                      : 'bg-emerald-50 text-emerald-700'
+                  }`}
+                >
+                  {m.uiAvailable === false ? 'API only' : 'Active'}
                 </span>
               </div>
               <p className="mt-1 text-xs text-slate-500">{m.description}</p>

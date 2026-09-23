@@ -5,6 +5,7 @@ import { eq, and, desc } from 'drizzle-orm';
 import { NotFoundError } from '../../core/errors/http.js';
 import { getTenant } from '../../core/tenancy/context.js';
 import { audit } from '../audit/service.js';
+import { notify } from '../notifications/service.js';
 
 const proposalsRouter = new Hono();
 
@@ -142,6 +143,12 @@ proposalsRouter.post('/:id/approve', async (c) => {
   if (!updated) throw new NotFoundError('Proposal', proposalId);
 
   await audit(c, 'proposal.approve', 'proposal', proposalId);
+
+  await notify(c, updated.createdBy, 'proposal.approve', `Proposal approved: ${updated.title}`, {
+    body: 'Your proposal was marked approved.',
+    link: '/proposals',
+    metadata: { proposalId },
+  });
 
   return c.json({ proposal: updated });
 });

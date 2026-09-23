@@ -55,7 +55,8 @@ export async function api<T>(
   path: string,
   options: { method?: string; body?: unknown; auth?: boolean } = {},
 ): Promise<T> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const isForm = options.body instanceof FormData;
+  const headers: Record<string, string> = isForm ? {} : { 'Content-Type': 'application/json' };
   const token = getToken();
   const orgId = getOrgId();
   if (options.auth !== false && token) {
@@ -65,7 +66,12 @@ export async function api<T>(
   const res = await fetch(`${API_URL}${path}`, {
     method: options.method || 'GET',
     headers,
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    body:
+      options.body === undefined
+        ? undefined
+        : isForm
+          ? (options.body as FormData)
+          : JSON.stringify(options.body),
   });
   const data = (await res.json().catch(() => ({}))) as T & {
     error?: { message?: string };

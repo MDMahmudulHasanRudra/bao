@@ -7,16 +7,18 @@ interface ModuleConfig {
   description: string;
   enabled: boolean;
   comingSoon: boolean;
+  uiAvailable: boolean;
   icon?: string;
 }
 
-const MODULE_REGISTRY: ModuleConfig[] = [
+export const MODULE_REGISTRY: ModuleConfig[] = [
   {
     id: 'dashboard',
     name: 'Dashboard',
     description: 'Overview and quick actions',
     enabled: true,
     comingSoon: false,
+    uiAvailable: true,
   },
   {
     id: 'knowledge',
@@ -24,6 +26,7 @@ const MODULE_REGISTRY: ModuleConfig[] = [
     description: 'Company knowledge base and RAG',
     enabled: true,
     comingSoon: false,
+    uiAvailable: true,
   },
   {
     id: 'ai-assistant',
@@ -31,6 +34,7 @@ const MODULE_REGISTRY: ModuleConfig[] = [
     description: 'AI-powered chat and assistance',
     enabled: true,
     comingSoon: false,
+    uiAvailable: true,
   },
   {
     id: 'sales',
@@ -38,6 +42,7 @@ const MODULE_REGISTRY: ModuleConfig[] = [
     description: 'CRM, pipeline, and lead management',
     enabled: true,
     comingSoon: false,
+    uiAvailable: true,
   },
   {
     id: 'proposals',
@@ -45,6 +50,7 @@ const MODULE_REGISTRY: ModuleConfig[] = [
     description: 'Proposal creation and management',
     enabled: true,
     comingSoon: false,
+    uiAvailable: true,
   },
   {
     id: 'presentations',
@@ -52,6 +58,7 @@ const MODULE_REGISTRY: ModuleConfig[] = [
     description: 'AI-generated presentations',
     enabled: true,
     comingSoon: false,
+    uiAvailable: true,
   },
   {
     id: 'intelligence',
@@ -59,6 +66,7 @@ const MODULE_REGISTRY: ModuleConfig[] = [
     description: 'Web monitoring and competitive intelligence',
     enabled: true,
     comingSoon: false,
+    uiAvailable: true,
   },
   {
     id: 'notifications',
@@ -66,6 +74,7 @@ const MODULE_REGISTRY: ModuleConfig[] = [
     description: 'Alerts and notifications',
     enabled: true,
     comingSoon: false,
+    uiAvailable: true,
   },
   {
     id: 'analytics',
@@ -73,6 +82,7 @@ const MODULE_REGISTRY: ModuleConfig[] = [
     description: 'Business analytics and reporting',
     enabled: true,
     comingSoon: false,
+    uiAvailable: false,
   },
   {
     id: 'settings',
@@ -80,6 +90,7 @@ const MODULE_REGISTRY: ModuleConfig[] = [
     description: 'Organization and user settings',
     enabled: true,
     comingSoon: false,
+    uiAvailable: true,
   },
   {
     id: 'automation',
@@ -87,6 +98,7 @@ const MODULE_REGISTRY: ModuleConfig[] = [
     description: 'CRM automation sequences',
     enabled: false,
     comingSoon: true,
+    uiAvailable: false,
   },
   {
     id: 'agent-marketplace',
@@ -94,6 +106,7 @@ const MODULE_REGISTRY: ModuleConfig[] = [
     description: 'AI agent marketplace',
     enabled: false,
     comingSoon: true,
+    uiAvailable: false,
   },
   {
     id: 'revenue-analytics',
@@ -101,6 +114,7 @@ const MODULE_REGISTRY: ModuleConfig[] = [
     description: 'Advanced revenue analytics',
     enabled: false,
     comingSoon: true,
+    uiAvailable: false,
   },
   {
     id: 'accounting',
@@ -108,6 +122,7 @@ const MODULE_REGISTRY: ModuleConfig[] = [
     description: 'Native accounting integration',
     enabled: false,
     comingSoon: true,
+    uiAvailable: false,
   },
   {
     id: 'mobile',
@@ -115,6 +130,7 @@ const MODULE_REGISTRY: ModuleConfig[] = [
     description: 'iOS and Android apps',
     enabled: false,
     comingSoon: true,
+    uiAvailable: false,
   },
   {
     id: 'workflow-builder',
@@ -122,6 +138,7 @@ const MODULE_REGISTRY: ModuleConfig[] = [
     description: 'Custom workflow builder',
     enabled: false,
     comingSoon: true,
+    uiAvailable: false,
   },
   {
     id: 'white-label',
@@ -129,6 +146,7 @@ const MODULE_REGISTRY: ModuleConfig[] = [
     description: 'White-label customization',
     enabled: false,
     comingSoon: true,
+    uiAvailable: false,
   },
   {
     id: 'billing',
@@ -136,6 +154,7 @@ const MODULE_REGISTRY: ModuleConfig[] = [
     description: 'Subscription and billing management',
     enabled: false,
     comingSoon: true,
+    uiAvailable: false,
   },
   {
     id: 'api-marketplace',
@@ -143,6 +162,7 @@ const MODULE_REGISTRY: ModuleConfig[] = [
     description: 'Public API marketplace',
     enabled: false,
     comingSoon: true,
+    uiAvailable: false,
   },
 ];
 

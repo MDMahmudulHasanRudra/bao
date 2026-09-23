@@ -28,7 +28,9 @@ import { errorHandler } from '../../apps/api/src/core/errors/handler.js';
 import { authMiddleware, signToken } from '../../apps/api/src/core/auth/jwt.js';
 import { tenantMiddleware } from '../../apps/api/src/core/tenancy/context.js';
 
-function buildProtectedApp(membership: { userId: string; organizationId: string; role: string } | null) {
+function buildProtectedApp(
+  membership: { userId: string; organizationId: string; role: string } | null,
+) {
   const mockDb = {
     select: vi.fn().mockReturnThis(),
     from: vi.fn().mockReturnThis(),
@@ -118,7 +120,9 @@ describe('Cross-tenant — source contract checks', () => {
     const source = await readSource('../../apps/api/src/modules/organizations/routes.ts');
     const putMatch = source.match(/orgs\.put\('\/:id'[\s\S]*?\}\);/);
     expect(putMatch).toBeTruthy();
-    expect(putMatch![0]).toMatch(/eq\(organizations\.id,\s*orgId\),\s*eq\(organizations\.id,\s*tenant\.organizationId\)/);
+    expect(putMatch![0]).toMatch(
+      /eq\(organizations\.id,\s*orgId\),\s*eq\(organizations\.id,\s*tenant\.organizationId\)/,
+    );
   });
 
   it('proposals GET /:id filters by organizationId', async () => {
@@ -139,6 +143,8 @@ describe('Cross-tenant — source contract checks', () => {
     const source = await readSource('../../apps/api/src/modules/knowledge/routes.ts');
     const getMatch = source.match(/knowledge\.get\('\/:id'[\s\S]*?\}\);/);
     expect(getMatch).toBeTruthy();
-    expect(getMatch![0]).toMatch(/eq\(knowledgeSources\.organizationId,\s*tenant\.organizationId\)/);
+    expect(getMatch![0]).toMatch(
+      /eq\(knowledgeSources\.organizationId,\s*tenant\.organizationId\)/,
+    );
   });
 });

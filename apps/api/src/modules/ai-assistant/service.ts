@@ -67,8 +67,13 @@ export async function sendMessage(
     .map((c, i) => `[Source ${i + 1}: ${c.sourceTitle}]\n${c.content}`)
     .join('\n\n');
 
-  // Generate completion
-  const result = await generateCompletion(SYSTEM_PROMPT, content, context || undefined);
+  // Generate completion via org policy → capability default → provider adapter
+  const result = await generateCompletion(
+    SYSTEM_PROMPT,
+    content,
+    context || undefined,
+    organizationId,
+  );
 
   // Build citations
   const citations = chunks.map((c) => ({

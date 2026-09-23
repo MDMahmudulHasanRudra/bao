@@ -56,6 +56,8 @@ interface SourceRow {
   storage_key: string | null;
   mime_type: string | null;
   url: string | null;
+  uploaded_by: string | null;
+  title: string | null;
 }
 
 const MAX_URL_FETCH_BYTES = 500_000;
@@ -218,7 +220,7 @@ export async function extractText(buffer: Buffer, mimeType: string): Promise<str
 export async function loadSource(sourceId: string, organizationId: string): Promise<SourceRow> {
   const sql = getSql();
   const rows = await sql<SourceRow[]>`
-    SELECT id, organization_id, storage_key, mime_type, url
+    SELECT id, organization_id, storage_key, mime_type, url, uploaded_by, title
     FROM knowledge_sources
     WHERE id = ${sourceId} AND organization_id = ${organizationId} AND deleted_at IS NULL
   `;
@@ -250,6 +252,28 @@ async function setStatus(
     params as never[],
   );
   if (!rows.length) throw new Error('Knowledge source not found for organization');
+}
+
+async function notifyReady(source: SourceRow) {
+  if (!source.uploaded_by) return;
+  try {
+    const sql = getSql();
+    await sql`
+      INSERT INTO notifications (id, organization_id, user_id, type, title, body, link, metadata)
+      VALUES (
+        gen_random_uuid(),
+        ${source.organization_id},
+        ${source.uploaded_by},
+        'knowledge.ready',
+        ${`Knowledge ready: ${source.title || source.id}`},
+        'Your source finished processing and is searchable.',
+        '/knowledge',
+        '{}'::jsonb
+      )
+    `;
+  } catch {
+    // Notification should never fail ingest
+  }
 }
 
 async function replaceChunks(
@@ -302,6 +326,7 @@ export async function processDocument(jobData: IngestJobData) {
     const chunks = chunkText(text, 500, 50);
     await replaceChunks(sourceId, orgId, chunks);
     await setStatus(sourceId, orgId, 'ready', { chunkCount: chunks.length });
+    await notifyReady(source);
 
     log.info({ sourceId, chunks: chunks.length }, 'Document processed');
   } catch (err) {
@@ -332,6 +357,7 @@ export async function processUrl(jobData: IngestJobData) {
     const chunks = chunkText(text, 500, 50);
     await replaceChunks(sourceId, orgId, chunks);
     await setStatus(sourceId, orgId, 'ready', { chunkCount: chunks.length });
+    await notifyReady(source);
 
     log.info({ sourceId, chunks: chunks.length }, 'URL source processed');
   } catch (err) {

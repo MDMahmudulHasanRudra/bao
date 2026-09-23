@@ -3,8 +3,9 @@ import { getDb } from '../../db/index.js';
 import { memberships, users } from '../../db/schema.js';
 import { eq, and, count } from 'drizzle-orm';
 import { NotFoundError, ForbiddenError, ConflictError } from '../../core/errors/http.js';
-import { getTenant } from '../../core/tenancy/context.js';
+import { getTenant, requirePermission } from '../../core/tenancy/context.js';
 import { audit } from '../audit/service.js';
+import { notify } from '../notifications/service.js';
 
 const VALID_ROLES = [
   'owner',
@@ -74,9 +75,8 @@ accessControl.get('/members', async (c) => {
   return c.json({ members });
 });
 
-accessControl.post('/invite', async (c) => {
+accessControl.post('/invite', requirePermission('members.manage'), async (c) => {
   const tenant = getTenant(c);
-  if (!['owner', 'admin'].includes(tenant.role)) throw new ForbiddenError('Admin role required');
 
   const body = await c.req.json<{ email: string; role: string }>();
   validateRoleChange(tenant.role as ValidRole, body.role, false);
@@ -111,12 +111,17 @@ accessControl.post('/invite', async (c) => {
     role: body.role,
   });
 
+  await notify(c, user.id, 'member.invite', `You've been invited as ${body.role}`, {
+    body: 'An administrator added you to this workspace.',
+    link: '/dashboard',
+    metadata: { role: body.role },
+  });
+
   return c.json({ membership }, 201);
 });
 
-accessControl.put('/members/:id/role', async (c) => {
+accessControl.put('/members/:id/role', requirePermission('members.manage'), async (c) => {
   const tenant = getTenant(c);
-  if (!['owner', 'admin'].includes(tenant.role)) throw new ForbiddenError('Admin role required');
 
   const db = getDb();
   const memberId = c.req.param('id');
@@ -144,12 +149,17 @@ accessControl.put('/members/:id/role', async (c) => {
     previousRole: targetMembership.role,
   });
 
+  await notify(c, targetMembership.userId, 'member.role_change', `Your role is now ${body.role}`, {
+    body: `Changed from ${targetMembership.role}.`,
+    link: '/dashboard',
+    metadata: { role: body.role, previousRole: targetMembership.role },
+  });
+
   return c.json({ membership: updated });
 });
 
-accessControl.delete('/members/:id', async (c) => {
+accessControl.delete('/members/:id', requirePermission('members.manage'), async (c) => {
   const tenant = getTenant(c);
-  if (!['owner', 'admin'].includes(tenant.role)) throw new ForbiddenError('Admin role required');
 
   const db = getDb();
   const memberId = c.req.param('id');

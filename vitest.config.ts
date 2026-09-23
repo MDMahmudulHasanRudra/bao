@@ -13,6 +13,9 @@ export default defineConfig({
     environment: 'node',
     include: ['**/*.test.ts'],
     exclude: ['**/node_modules/**', '**/dist/**'],
+    env: {
+      ENCRYPTION_KEY: 'test-encryption-key-at-least-32-chars!!',
+    },
     server: {
       deps: {
         inline: ['postgres'],

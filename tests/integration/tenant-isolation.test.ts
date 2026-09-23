@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import jwt from 'jsonwebtoken';
 
 vi.mock('@bao/config', async () => {
   process.env.NODE_ENV = 'test';
@@ -9,6 +10,8 @@ vi.mock('@bao/config', async () => {
   process.env.STORAGE_ACCESS_KEY = 'test';
   process.env.STORAGE_SECRET_KEY = 'test';
   process.env.AI_API_KEY = 'test';
+  process.env.ENCRYPTION_KEY =
+    process.env.ENCRYPTION_KEY || 'test-encryption-key-at-least-32-chars!!';
   const real = await vi.importActual<typeof import('@bao/config')>('@bao/config');
   return {
     ...real,
@@ -23,7 +26,11 @@ vi.mock('../../apps/api/src/db/index.js', () => ({
 }));
 
 import { validateRoleChange } from '../../apps/api/src/modules/access-control/routes.js';
-import { tenantMiddleware, requireRole } from '../../apps/api/src/core/tenancy/context.js';
+import {
+  tenantMiddleware,
+  hasPermission,
+  requirePermission,
+} from '../../apps/api/src/core/tenancy/context.js';
 import { signToken, verifyToken, authMiddleware } from '../../apps/api/src/core/auth/jwt.js';
 
 describe('RBAC — validateRoleChange', () => {
@@ -47,7 +54,9 @@ describe('RBAC — validateRoleChange', () => {
 
   it('rejects self role change regardless of target role', () => {
     expect(() => validateRoleChange('owner', 'admin', true)).toThrow(/Cannot change your own role/);
-    expect(() => validateRoleChange('admin', 'viewer', true)).toThrow(/Cannot change your own role/);
+    expect(() => validateRoleChange('admin', 'viewer', true)).toThrow(
+      /Cannot change your own role/,
+    );
   });
 
   it('allows owner to assign any lower role to another user', () => {
@@ -83,7 +92,9 @@ describe('Tenant middleware', () => {
     if (userId) sets.userId = userId;
     return {
       get: (k: string) => sets[k],
-      set: (k: string, v: unknown) => { sets[k] = v; },
+      set: (k: string, v: unknown) => {
+        sets[k] = v;
+      },
       req: { header: (n: string) => (n === 'x-organization-id' ? orgHeader : undefined) },
       _sets: sets,
     };
@@ -118,27 +129,62 @@ describe('Tenant middleware', () => {
   });
 });
 
-describe('requireRole', () => {
-  it('rejects when tenant role not in allowlist', async () => {
-    const mw = requireRole('owner', 'admin');
-    const c = { get: (k: string) => (k === 'tenant' ? { userId: 'u', organizationId: 'o', role: 'viewer' } : undefined) };
+describe('permission matrix — foundation entries', () => {
+  it('org.settings.manage: owner and admin only', () => {
+    expect(hasPermission('owner', 'org.settings.manage')).toBe(true);
+    expect(hasPermission('admin', 'org.settings.manage')).toBe(true);
+    expect(hasPermission('manager', 'org.settings.manage')).toBe(false);
+    expect(hasPermission('viewer', 'org.settings.manage')).toBe(false);
+  });
+
+  it('members.manage: owner and admin only', () => {
+    expect(hasPermission('owner', 'members.manage')).toBe(true);
+    expect(hasPermission('admin', 'members.manage')).toBe(true);
+    expect(hasPermission('analyst', 'members.manage')).toBe(false);
+    expect(hasPermission('member', 'members.manage')).toBe(false);
+  });
+
+  it('intelligence.targets.manage: owner, admin, and analyst', () => {
+    expect(hasPermission('owner', 'intelligence.targets.manage')).toBe(true);
+    expect(hasPermission('admin', 'intelligence.targets.manage')).toBe(true);
+    expect(hasPermission('analyst', 'intelligence.targets.manage')).toBe(true);
+    expect(hasPermission('member', 'intelligence.targets.manage')).toBe(false);
+    expect(hasPermission('viewer', 'intelligence.targets.manage')).toBe(false);
+  });
+
+  it('audit.read: owner and admin only', () => {
+    expect(hasPermission('owner', 'audit.read')).toBe(true);
+    expect(hasPermission('admin', 'audit.read')).toBe(true);
+    expect(hasPermission('analyst', 'audit.read')).toBe(false);
+    expect(hasPermission('member', 'audit.read')).toBe(false);
+    expect(hasPermission('viewer', 'audit.read')).toBe(false);
+  });
+
+  it('unknown permission denies all roles', () => {
+    expect(hasPermission('owner', 'no.such.permission')).toBe(false);
+    expect(hasPermission('admin', 'no.such.permission')).toBe(false);
+  });
+
+  it('requirePermission rejects with actionable message', async () => {
+    const mw = requirePermission('members.manage');
+    const c = {
+      get: (k: string) =>
+        k === 'tenant' ? { userId: 'u', organizationId: 'o', role: 'member' } : undefined,
+    };
     const next = vi.fn();
-    await expect(mw(c as never, next)).rejects.toThrow(/Required role/);
+    await expect(mw(c as never, next)).rejects.toThrow(/Missing permission: members\.manage/);
     expect(next).not.toHaveBeenCalled();
   });
 
-  it('passes when tenant role is in allowlist', async () => {
-    const mw = requireRole('owner', 'admin');
-    const c = { get: (k: string) => (k === 'tenant' ? { userId: 'u', organizationId: 'o', role: 'admin' } : undefined) };
+  it('requirePermission passes for an allowed role', async () => {
+    const mw = requirePermission('members.manage');
+    const c = {
+      get: (k: string) =>
+        k === 'tenant' ? { userId: 'u', organizationId: 'o', role: 'admin' } : undefined,
+    };
     const next = vi.fn();
     await mw(c as never, next);
     expect(next).toHaveBeenCalled();
-  });
-
-  it('rejects when no tenant context', async () => {
-    const mw = requireRole('owner');
-    const c = { get: () => undefined };
-    await expect(mw(c as never, vi.fn())).rejects.toThrow(/Tenant context required/);
   });
 });
 
@@ -151,7 +197,6 @@ describe('Authentication — JWT', () => {
   });
 
   it('rejects a token signed with a different secret', () => {
-    const jwt = require('jsonwebtoken');
     const badToken = jwt.sign({ sub: 'x', email: 'x@y.z' }, 'wrong-secret-at-least-32-chars-long!');
     expect(() => verifyToken(badToken)).toThrow();
   });
@@ -166,12 +211,9 @@ describe('Authentication — JWT', () => {
   });
 
   it('rejects an expired token', () => {
-    const jwt = require('jsonwebtoken');
-    const expired = jwt.sign(
-      { sub: 'u', email: 'e@x.com' },
-      process.env.JWT_SECRET!,
-      { expiresIn: '-1s' },
-    );
+    const expired = jwt.sign({ sub: 'u', email: 'e@x.com' }, process.env.JWT_SECRET!, {
+      expiresIn: '-1s',
+    });
     expect(() => verifyToken(expired)).toThrow();
   });
 

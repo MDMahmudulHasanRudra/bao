@@ -25,6 +25,8 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(32),
   JWT_EXPIRES_IN: z.string().default('7d'),
   SESSION_SECRET: z.string().min(32),
+  // AES-256-GCM key material for provider secrets (any ≥32-char string; derived via SHA-256)
+  ENCRYPTION_KEY: z.string().min(32),
 
   STORAGE_ENDPOINT: z.string().url().default('http://localhost:9000'),
   STORAGE_BUCKET: z.string().default('business-ai-os'),

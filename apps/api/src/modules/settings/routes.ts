@@ -2,8 +2,8 @@ import { Hono } from 'hono';
 import { getDb } from '../../db/index.js';
 import { organizations } from '../../db/schema.js';
 import { eq } from 'drizzle-orm';
-import { NotFoundError, ForbiddenError } from '../../core/errors/http.js';
-import { getTenant } from '../../core/tenancy/context.js';
+import { NotFoundError } from '../../core/errors/http.js';
+import { getTenant, requirePermission } from '../../core/tenancy/context.js';
 import { audit } from '../audit/service.js';
 
 const settings = new Hono();
@@ -23,12 +23,8 @@ settings.get('/', async (c) => {
   return c.json({ settings: org.settings || {} });
 });
 
-settings.put('/', async (c) => {
+settings.put('/', requirePermission('org.settings.manage'), async (c) => {
   const tenant = getTenant(c);
-  if (!['owner', 'admin'].includes(tenant.role)) {
-    throw new ForbiddenError('Admin role required');
-  }
-
   const db = getDb();
   const body = await c.req.json<{ settings: Record<string, unknown> }>();
 

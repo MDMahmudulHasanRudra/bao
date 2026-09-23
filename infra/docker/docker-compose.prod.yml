@@ -69,6 +69,7 @@ services:
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
       JWT_SECRET: ${JWT_SECRET}
       SESSION_SECRET: ${SESSION_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       WEB_URL: ${WEB_URL:-http://localhost:3000}
       STORAGE_ENDPOINT: http://minio:9000
       STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER}
@@ -122,6 +123,7 @@ services:
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
       JWT_SECRET: ${JWT_SECRET}
       SESSION_SECRET: ${SESSION_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       STORAGE_ENDPOINT: http://minio:9000
       STORAGE_BUCKET: ${STORAGE_BUCKET:-business-ai-os}
       STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER}

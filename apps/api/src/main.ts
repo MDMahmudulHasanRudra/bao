@@ -23,8 +23,10 @@ import intelligenceRoutes from './modules/intelligence/routes.js';
 import notificationsRoutes from './modules/notifications/routes.js';
 import dashboardRoutes from './modules/dashboard/routes.js';
 import settingsRoutes from './modules/settings/routes.js';
+import aiSettingsRoutes from './modules/ai-settings/routes.js';
 import analyticsRoutes from './modules/analytics/routes.js';
 import moduleRegistryRoutes from './modules/module-registry/routes.js';
+import auditRoutes from './modules/audit/routes.js';
 
 const env = loadEnv();
 const log = getLogger();
@@ -61,8 +63,10 @@ protectedApp.route('/intelligence', intelligenceRoutes);
 protectedApp.route('/notifications', notificationsRoutes);
 protectedApp.route('/dashboard', dashboardRoutes);
 protectedApp.route('/settings', settingsRoutes);
+protectedApp.route('/ai-settings', aiSettingsRoutes);
 protectedApp.route('/analytics', analyticsRoutes);
 protectedApp.route('/modules', moduleRegistryRoutes);
+protectedApp.route('/audit', auditRoutes);
 
 app.route('/api/v1', protectedApp);
 

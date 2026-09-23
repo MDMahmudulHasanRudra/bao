@@ -1,4 +1,4 @@
-import type { Context, Next } from 'hono';
+import type { Context, MiddlewareHandler, Next } from 'hono';
 import { UnauthorizedError, ForbiddenError } from '../errors/http.js';
 
 export interface TenantContext {
@@ -45,12 +45,24 @@ export function tenantMiddleware() {
   };
 }
 
-export function requireRole(...allowedRoles: string[]) {
-  return async (c: Context, next: Next) => {
-    const tenant = c.get('tenant');
-    if (!tenant) throw new UnauthorizedError('Tenant context required');
-    if (!allowedRoles.includes(tenant.role)) {
-      throw new ForbiddenError(`Required role: ${allowedRoles.join(' or ')}`);
+// Permission matrix — single source of truth for role→permission (see audit A1).
+const PERMISSION_MATRIX: Record<string, string[]> = {
+  'ai.providers.manage': ['owner', 'admin'],
+  'org.settings.manage': ['owner', 'admin'],
+  'members.manage': ['owner', 'admin'],
+  'intelligence.targets.manage': ['owner', 'admin', 'analyst'],
+  'audit.read': ['owner', 'admin'],
+};
+
+export function hasPermission(role: string, permission: string): boolean {
+  return (PERMISSION_MATRIX[permission] ?? []).includes(role);
+}
+
+export function requirePermission(permission: string): MiddlewareHandler {
+  return async (c, next) => {
+    const tenant = getTenant(c);
+    if (!hasPermission(tenant.role, permission)) {
+      throw new ForbiddenError(`Missing permission: ${permission}`);
     }
     await next();
   };

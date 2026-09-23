@@ -427,6 +427,63 @@ export const intelligenceEvents = pgTable(
 );
 
 // ============================================================
+// AI Provider & Model Settings
+// ============================================================
+
+export const aiProviders = pgTable(
+  'ai_providers',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organizations.id),
+    provider: varchar('provider', { length: 50 }).notNull(),
+    label: varchar('label', { length: 255 }),
+    baseUrl: text('base_url'),
+    encryptedKey: text('encrypted_key').notNull(),
+    keySuffix: varchar('key_suffix', { length: 16 }).notNull(),
+    status: varchar('status', { length: 20 }).notNull().default('active'),
+    lastTestedAt: timestamp('last_tested_at', { withTimezone: true }),
+    lastTestResult: varchar('last_test_result', { length: 20 }),
+    lastTestError: text('last_test_error'),
+    createdBy: uuid('created_by').references(() => users.id),
+    updatedBy: uuid('updated_by').references(() => users.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    ai_providers_org_idx: index('ai_providers_org_idx').on(t.organizationId),
+    ai_providers_org_provider_idx: uniqueIndex('ai_providers_org_provider_idx').on(
+      t.organizationId,
+      t.provider,
+    ),
+  }),
+);
+
+export const aiModelDefaults = pgTable(
+  'ai_model_defaults',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organizations.id),
+    capability: varchar('capability', { length: 50 }).notNull(),
+    provider: varchar('provider', { length: 50 }).notNull(),
+    modelId: varchar('model_id', { length: 255 }).notNull(),
+    updatedBy: uuid('updated_by').references(() => users.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    ai_model_defaults_org_idx: index('ai_model_defaults_org_idx').on(t.organizationId),
+    ai_model_defaults_org_cap_idx: uniqueIndex('ai_model_defaults_org_cap_idx').on(
+      t.organizationId,
+      t.capability,
+    ),
+  }),
+);
+
+// ============================================================
 // Notifications
 // ============================================================
 

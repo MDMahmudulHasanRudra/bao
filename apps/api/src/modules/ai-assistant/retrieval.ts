@@ -33,13 +33,13 @@ export async function retrieveRelevantChunks(
     return { chunks: [], totalTokens: 0 };
   }
 
-  // Generate query embedding
+  // Generate query embedding (org-scoped; falls back to trigram search when unconfigured)
   let queryEmbedding: number[] = [];
   try {
-    const result = await generateEmbedding(query);
+    const result = await generateEmbedding(query, organizationId);
     queryEmbedding = result.embedding;
   } catch {
-    // Fallback to text search if embedding fails
+    // Fallback to text search if embedding fails or no embedding model configured
   }
 
   // Hybrid retrieval: combine vector similarity and full-text search

@@ -17,6 +17,12 @@ export interface PresentationJob {
   error?: string;
 }
 
+function notConfigured(): Error {
+  return new Error(
+    'Presenton is not configured. Set PRESENTON_API_URL and PRESENTON_API_KEY in the environment.',
+  );
+}
+
 export async function createPresentationJob(
   request: PresentationRequest,
 ): Promise<PresentationJob> {
@@ -24,11 +30,7 @@ export async function createPresentationJob(
 
   if (!env.PRESENTON_API_URL || !env.PRESENTON_API_KEY) {
     log.warn('Presenton not configured');
-    return {
-      jobId: `mock-${Date.now()}`,
-      status: 'completed',
-      outputUrl: undefined,
-    };
+    throw notConfigured();
   }
 
   try {
@@ -43,6 +45,7 @@ export async function createPresentationJob(
         content: request.content,
         template_id: request.templateId,
       }),
+      signal: AbortSignal.timeout(15_000),
     });
 
     if (!response.ok) throw new Error(`Presenton API error: ${response.status}`);
@@ -59,7 +62,8 @@ export async function getPresentationStatus(jobId: string): Promise<Presentation
   const env = getEnv();
 
   if (!env.PRESENTON_API_URL || !env.PRESENTON_API_KEY) {
-    return { jobId, status: 'completed', outputUrl: undefined };
+    log.warn('Presenton not configured');
+    throw notConfigured();
   }
 
   try {
@@ -67,6 +71,7 @@ export async function getPresentationStatus(jobId: string): Promise<Presentation
       headers: {
         Authorization: `Bearer ${env.PRESENTON_API_KEY}`,
       },
+      signal: AbortSignal.timeout(10_000),
     });
 
     if (!response.ok) throw new Error(`Presenton API error: ${response.status}`);
