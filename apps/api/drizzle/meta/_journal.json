@@ -29,6 +29,13 @@
       "when": 1790340911760,
       "tag": "0003_red_firebrand",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790353359152,
+      "tag": "0004_lead_intelligence",
+      "breakpoints": true
     }
   ]
 }

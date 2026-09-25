@@ -11,6 +11,13 @@ import {
   uniqueIndex,
   date,
 } from 'drizzle-orm/pg-core';
+import type {
+  DiscoverySpecification,
+  ResearchDepth,
+  ResearchJobStats,
+  ResearchJobProgress,
+  ResearchJobStatus,
+} from '@bao/contracts';
 
 // ============================================================
 // Identity & Organizations
@@ -1260,5 +1267,268 @@ export const whiteLabelSettings = pgTable(
     white_label_settings_domain_uq: uniqueIndex('white_label_settings_domain_uq').on(
       t.customDomain,
     ),
+  }),
+);
+
+// ============================================================
+// Lead Intelligence
+// Layered so a re-analysis never requires re-crawling:
+//   research_sources → web_documents → lead_evidence → lead_candidates
+// ============================================================
+
+export const researchJobs = pgTable(
+  'research_jobs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organizations.id),
+    name: varchar('name', { length: 255 }).notNull(),
+    // queued, discovering, analyzing, completed, failed, cancelled
+    status: varchar('status', { length: 20 })
+      .$type<ResearchJobStatus>()
+      .notNull()
+      .default('queued'),
+    // validated DiscoverySpecification (see @bao/contracts)
+    spec: jsonb('spec').$type<DiscoverySpecification>().notNull(),
+    depth: varchar('depth', { length: 10 }).$type<ResearchDepth>().notNull().default('standard'),
+    // { discovered, processed, qualified, rejected, failed, total }
+    progress: jsonb('progress').$type<ResearchJobProgress>().default({
+      discovered: 0,
+      processed: 0,
+      qualified: 0,
+      rejected: 0,
+      failed: 0,
+      total: 0,
+    }),
+    // companiesDiscovered / candidatesFound / pagesCrawled / aiCalls / errors
+    stats: jsonb('stats')
+      .$type<ResearchJobStats>()
+      .default({ companiesDiscovered: 0, candidatesFound: 0, pagesCrawled: 0, aiCalls: 0, errors: 0 }),
+    usage: jsonb('usage').$type<Record<string, number>>().default({}),
+
+    error: text('error'),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    research_jobs_org_idx: index('research_jobs_org_idx').on(t.organizationId),
+    research_jobs_status_idx: index('research_jobs_status_idx').on(t.status),
+    research_jobs_org_created_idx: index('research_jobs_org_created_idx').on(
+      t.organizationId,
+      t.createdAt,
+    ),
+  }),
+);
+
+export const researchTasks = pgTable(
+  'research_tasks',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organizations.id),
+    jobId: uuid('job_id')
+      .notNull()
+      .references(() => researchJobs.id, { onDelete: 'cascade' }),
+    // discovery, company-research, analysis
+    type: varchar('type', { length: 50 }).notNull(),
+    // pending, running, completed, failed, skipped, cancelled
+    status: varchar('status', { length: 20 }).notNull().default('pending'),
+    // domain or url the task operates on
+    target: varchar('target', { length: 500 }),
+    attempt: integer('attempt').notNull().default(0),
+    // content hash / business key — makes a retried job a no-op instead of a duplicate
+    idempotencyKey: varchar('idempotency_key', { length: 255 }).notNull(),
+    error: text('error'),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    research_tasks_job_idx: index('research_tasks_job_idx').on(t.jobId),
+    research_tasks_status_idx: index('research_tasks_status_idx').on(t.status),
+    research_tasks_target_idx: index('research_tasks_target_idx').on(t.target),
+    research_tasks_idempotency_uq: uniqueIndex('research_tasks_idempotency_uq').on(
+      t.organizationId,
+      t.idempotencyKey,
+    ),
+  }),
+);
+
+export const researchSources = pgTable(
+  'research_sources',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organizations.id),
+    jobId: uuid('job_id').references(() => researchJobs.id, { onDelete: 'cascade' }),
+    // search_result, website, career_page, news, public_directory, user_provided, api
+    sourceType: varchar('source_type', { length: 30 }).notNull(),
+    provider: varchar('provider', { length: 50 }).notNull(),
+    url: text('url').notNull(),
+    normalizedUrl: text('normalized_url').notNull(),
+    title: varchar('title', { length: 500 }),
+    // pending, success, blocked, not_found, timeout, error
+    status: varchar('status', { length: 20 }).notNull().default('pending'),
+    contentHash: varchar('content_hash', { length: 64 }),
+    error: text('error'),
+    retrievedAt: timestamp('retrieved_at', { withTimezone: true }),
+    metadata: jsonb('metadata').$type<Record<string, unknown>>().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    research_sources_org_idx: index('research_sources_org_idx').on(t.organizationId),
+    research_sources_job_idx: index('research_sources_job_idx').on(t.jobId),
+    research_sources_url_idx: index('research_sources_url_idx').on(t.organizationId, t.normalizedUrl),
+    research_sources_hash_idx: index('research_sources_hash_idx').on(t.contentHash),
+  }),
+);
+
+export const webDocuments = pgTable(
+  'web_documents',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organizations.id),
+    sourceId: uuid('source_id')
+      .notNull()
+      .references(() => researchSources.id, { onDelete: 'cascade' }),
+    url: text('url').notNull(),
+    canonicalUrl: text('canonical_url'),
+    title: varchar('title', { length: 500 }),
+    description: text('description'),
+    headings: jsonb('headings').$type<string[]>().default([]),
+    // extracted main text — never raw HTML, never sent to an LLM unfiltered
+    content: text('content').notNull(),
+    language: varchar('language', { length: 20 }),
+    links: jsonb('links').$type<string[]>().default([]),
+    emails: jsonb('emails').$type<string[]>().default([]),
+    phones: jsonb('phones').$type<string[]>().default([]),
+    socialLinks: jsonb('social_links').$type<string[]>().default([]),
+    contentHash: varchar('content_hash', { length: 64 }).notNull(),
+    extractedBy: varchar('extracted_by', { length: 50 }).notNull(), // provider id
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    web_documents_org_idx: index('web_documents_org_idx').on(t.organizationId),
+    web_documents_source_uq: uniqueIndex('web_documents_source_uq').on(t.sourceId),
+    web_documents_hash_idx: index('web_documents_hash_idx').on(t.organizationId, t.contentHash),
+  }),
+);
+
+export const leadCandidates = pgTable(
+  'lead_candidates',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organizations.id),
+    jobId: uuid('job_id').references(() => researchJobs.id, { onDelete: 'set null' }),
+    // ---- normalized company (§24) ----
+    companyName: varchar('company_name', { length: 255 }).notNull(),
+    normalizedDomain: varchar('normalized_domain', { length: 255 }),
+    website: text('website'),
+    country: varchar('country', { length: 100 }),
+    region: varchar('region', { length: 100 }),
+    city: varchar('city', { length: 100 }),
+    industry: varchar('industry', { length: 100 }),
+    subIndustry: varchar('sub_industry', { length: 100 }),
+    employeeMin: integer('employee_min'),
+    employeeMax: integer('employee_max'),
+    description: text('description'),
+    products: jsonb('products').$type<string[]>().default([]),
+    services: jsonb('services').$type<string[]>().default([]),
+    technologies: jsonb('technologies').$type<string[]>().default([]),
+    socialLinks: jsonb('social_links').$type<string[]>().default([]),
+    // field -> source ids, so every normalized value is traceable
+    provenance: jsonb('provenance').$type<Record<string, string[]>>().default({}),
+    // ---- qualification (§29) ----
+    score: integer('score'), // 0-100
+    scoreReasons: jsonb('score_reasons').$type<string[]>().default([]),
+    icpMatch: jsonb('icp_match').$type<Record<string, string>>().default({}), // criterion -> match | unknown
+    summary: text('summary'),
+    // discovered, researching, analyzed, qualified, review_required, approved, rejected, imported
+    status: varchar('status', { length: 20 }).notNull().default('discovered'),
+    // possible, confirmed, not_duplicate
+    dedupeStatus: varchar('dedupe_status', { length: 20 }).notNull().default('possible'),
+    // set once promoted into the existing CRM (§33)
+    leadId: uuid('lead_id').references(() => leads.id, { onDelete: 'set null' }),
+    companyId: uuid('company_id').references(() => companies.id, { onDelete: 'set null' }),
+    contactId: uuid('contact_id').references(() => contacts.id, { onDelete: 'set null' }),
+    reviewedBy: uuid('reviewed_by').references(() => users.id, { onDelete: 'set null' }),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    lead_candidates_org_idx: index('lead_candidates_org_idx').on(t.organizationId),
+    lead_candidates_status_idx: index('lead_candidates_status_idx').on(t.status),
+    lead_candidates_job_idx: index('lead_candidates_job_idx').on(t.jobId),
+    // domain is the strong identity signal, so it is the dedupe key (§23)
+    lead_candidates_domain_uq: uniqueIndex('lead_candidates_domain_uq').on(
+      t.organizationId,
+      t.normalizedDomain,
+    ),
+  }),
+);
+
+export const companySignals = pgTable(
+  'company_signals',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organizations.id),
+    candidateId: uuid('candidate_id')
+      .notNull()
+      .references(() => leadCandidates.id, { onDelete: 'cascade' }),
+    // hiring, funding, expansion, new_product, technology_migration,
+    // security_initiative, leadership_change, new_market, employee_growth, new_location
+    type: varchar('type', { length: 40 }).notNull(),
+    title: varchar('title', { length: 255 }).notNull(),
+    description: text('description'),
+    confidence: integer('confidence'), // 0-100
+    sourceUrl: text('source_url'),
+    metadata: jsonb('metadata').$type<Record<string, unknown>>().default({}),
+    detectedAt: timestamp('detected_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    company_signals_org_idx: index('company_signals_org_idx').on(t.organizationId),
+    company_signals_candidate_idx: index('company_signals_candidate_idx').on(t.candidateId),
+    company_signals_type_idx: index('company_signals_type_idx').on(t.type),
+  }),
+);
+
+export const leadEvidence = pgTable(
+  'lead_evidence',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organizations.id),
+    candidateId: uuid('candidate_id').references(() => leadCandidates.id, {
+      onDelete: 'cascade',
+    }),
+    documentId: uuid('document_id').references(() => webDocuments.id, { onDelete: 'set null' }),
+    sourceId: uuid('source_id').references(() => researchSources.id, { onDelete: 'set null' }),
+    claim: text('claim').notNull(),
+    snippet: text('snippet'),
+    sourceUrl: text('source_url').notNull(),
+    retrievedAt: timestamp('retrieved_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    lead_evidence_org_idx: index('lead_evidence_org_idx').on(t.organizationId),
+    lead_evidence_candidate_idx: index('lead_evidence_candidate_idx').on(t.candidateId),
+    lead_evidence_source_idx: index('lead_evidence_source_idx').on(t.sourceId),
   }),
 );

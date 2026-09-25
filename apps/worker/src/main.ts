@@ -3,6 +3,7 @@ import { getLogger } from './logger.js';
 import { getRedis } from './redis.js';
 import { Worker } from 'bullmq';
 import { processDocument, processUrl, closeSql } from './ingest.js';
+import { processResearchJob } from './research/job.js';
 
 const env = loadEnv();
 const log = getLogger();
@@ -46,11 +47,26 @@ async function main() {
     log.error({ job: job?.name, id: job?.id, err }, `Job ${job?.name} failed permanently`);
   });
 
-  log.info({ nodeEnv: env.NODE_ENV }, 'Worker ready with document and URL processors');
+  // I/O-bound lead intelligence phase: discover companies and crawl their sites.
+  const researchWorker = new Worker(
+    'lead-intelligence-research',
+    async (job) => {
+      if (job.name === 'research') {
+        await processResearchJob(job.data as { jobId: string });
+      }
+    },
+    { connection: connection(), concurrency: 2 },
+  );
+  researchWorker.on('failed', (job, err) => {
+    log.error({ jobId: job?.data?.jobId, err }, 'Research job failed');
+  });
+
+  log.info({ nodeEnv: env.NODE_ENV }, 'Worker ready with document, URL, and research processors');
 
   const shutdown = async () => {
     log.info('Worker shutting down...');
     await documentWorker.close();
+    await researchWorker.close();
     await closeSql();
     await redis.quit();
     process.exit(0);

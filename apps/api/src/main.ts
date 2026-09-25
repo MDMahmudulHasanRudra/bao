@@ -20,6 +20,8 @@ import salesRoutes from './modules/sales/routes.js';
 import proposalsRoutes from './modules/proposals/routes.js';
 import presentationsRoutes from './modules/presentations/routes.js';
 import intelligenceRoutes from './modules/intelligence/routes.js';
+import leadIntelligenceRoutes from './modules/lead-intelligence/routes.js';
+import { startAnalysisWorker, stopAnalysisWorker } from './modules/lead-intelligence/analysis-worker.js';
 import notificationsRoutes from './modules/notifications/routes.js';
 import dashboardRoutes from './modules/dashboard/routes.js';
 import settingsRoutes from './modules/settings/routes.js';
@@ -71,6 +73,7 @@ protectedApp.route('/sales', salesRoutes);
 protectedApp.route('/proposals', proposalsRoutes);
 protectedApp.route('/presentations', presentationsRoutes);
 protectedApp.route('/intelligence', intelligenceRoutes);
+protectedApp.route('/lead-intelligence', leadIntelligenceRoutes);
 protectedApp.route('/notifications', notificationsRoutes);
 protectedApp.route('/dashboard', dashboardRoutes);
 protectedApp.route('/settings', settingsRoutes);
@@ -95,5 +98,15 @@ const port = env.PORT;
 log.info({ port }, `Business AI OS API listening on port ${port}`);
 
 serve({ fetch: app.fetch, port });
+
+// AI half of the lead intelligence pipeline. Started here, not in a separate service,
+// because it needs the org's decrypted AI provider key.
+startAnalysisWorker();
+
+for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+  process.once(signal, () => {
+    void stopAnalysisWorker().finally(() => process.exit(0));
+  });
+}
 
 export default { port, fetch: app.fetch };

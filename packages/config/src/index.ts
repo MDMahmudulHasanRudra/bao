@@ -48,6 +48,28 @@ const envSchema = z.object({
   DIFFY_API_URL: z.string().url().optional(),
   DIFFY_API_KEY: z.string().optional(),
 
+  // --- Lead Intelligence: search ---
+  // No search provider is configured by default; discovery then requires seed URLs.
+  SEARCH_PROVIDER: z.string().optional(),
+  SEARCH_API_KEY: z.string().optional(),
+
+  // --- Lead Intelligence: crawler limits (§15/§81 — finite by default) ---
+  CRAWLER_REQUEST_TIMEOUT: z.coerce.number().default(15000),
+  CRAWLER_MAX_RESPONSE_SIZE: z.coerce.number().default(2_000_000),
+  CRAWLER_MAX_DEPTH: z.coerce.number().default(2),
+  CRAWLER_MAX_PAGES_PER_DOMAIN: z.coerce.number().default(10),
+  CRAWLER_MAX_CONCURRENCY: z.coerce.number().default(4),
+  CRAWLER_RATE_LIMIT_MS: z.coerce.number().default(1000),
+  CRAWLER_USER_AGENT: z.string().default('BusinessAIOS/1.0 (+lead-intelligence)'),
+  CRAWLER_RESPECT_ROBOTS: envBool(true),
+
+  // --- Lead Intelligence: research cost control (§49) ---
+  RESEARCH_MAX_COMPANIES: z.coerce.number().default(200),
+  RESEARCH_MAX_QUERIES: z.coerce.number().default(8),
+  RESEARCH_MAX_PAGES_PER_COMPANY: z.coerce.number().default(8),
+  RESEARCH_MAX_AI_CALLS: z.coerce.number().default(500),
+  RESEARCH_CACHE_TTL_SECONDS: z.coerce.number().default(86400),
+
   RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60000),
   RATE_LIMIT_MAX_REQUESTS: z.coerce.number().default(100),
 

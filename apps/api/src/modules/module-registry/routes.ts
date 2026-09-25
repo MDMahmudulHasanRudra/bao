@@ -69,6 +69,14 @@ export const MODULE_REGISTRY: ModuleConfig[] = [
     uiAvailable: true,
   },
   {
+    id: 'lead-intelligence',
+    name: 'Lead Intelligence',
+    description: 'Discover and qualify companies against your ICP',
+    enabled: true,
+    comingSoon: false,
+    uiAvailable: true,
+  },
+  {
     id: 'notifications',
     name: 'Notifications',
     description: 'Alerts and notifications',
