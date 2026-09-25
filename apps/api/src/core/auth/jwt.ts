@@ -5,12 +5,12 @@ import { UnauthorizedError } from '../errors/http.js';
 
 export interface JwtPayload {
   sub: string;
-  email: string;
+  username: string;
   iat: number;
   exp: number;
 }
 
-export function signToken(payload: { sub: string; email: string }): string {
+export function signToken(payload: { sub: string; username: string }): string {
   const env = getEnv();
   return jwt.sign(payload, env.JWT_SECRET, { expiresIn: env.JWT_EXPIRES_IN } as jwt.SignOptions);
 }

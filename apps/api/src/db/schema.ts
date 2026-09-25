@@ -36,10 +36,18 @@ export const organizations = pgTable('organizations', {
 
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
-  email: varchar('email', { length: 255 }).notNull().unique(),
+  // Auth identifier. Lowercase, 3-32 chars, [a-z0-9._-].
+  username: varchar('username', { length: 32 }).notNull().unique(),
+  // Legacy: kept only so the 0006 migration stays reversible. Not used for auth.
+  email: varchar('email', { length: 255 }).unique(),
   passwordHash: varchar('password_hash', { length: 255 }).notNull(),
   name: varchar('name', { length: 255 }).notNull(),
   avatarUrl: text('avatar_url'),
+  jobTitle: varchar('job_title', { length: 120 }),
+  team: varchar('team', { length: 120 }),
+  phone: varchar('phone', { length: 40 }),
+  timezone: varchar('timezone', { length: 64 }),
+  bio: text('bio'),
   emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
   lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -531,7 +539,9 @@ export const invites = pgTable(
     organizationId: uuid('organization_id')
       .notNull()
       .references(() => organizations.id),
-    email: varchar('email', { length: 255 }).notNull(),
+    // Legacy, unused by auth. See 0006_username_login.sql.
+    username: varchar('username', { length: 32 }).notNull(),
+    email: varchar('email', { length: 255 }),
     role: varchar('role', { length: 50 }).notNull(),
     token: varchar('token', { length: 64 }).notNull().unique(),
     invitedBy: uuid('invited_by').references(() => users.id),
@@ -542,7 +552,7 @@ export const invites = pgTable(
   },
   (t) => ({
     invites_org_idx: index('invites_org_idx').on(t.organizationId),
-    invites_email_idx: index('invites_email_idx').on(t.email),
+    invites_username_idx: index('invites_username_idx').on(t.username),
   }),
 );
 

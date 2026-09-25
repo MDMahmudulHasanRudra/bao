@@ -51,8 +51,11 @@ app.use('*', requestLogger());
 app.get('/health', healthHandler);
 app.get('/ready', readinessHandler);
 
-// Public routes (login/register); /me needs a bearer token
+// Public routes (login/register); /me needs a bearer token.
+// The `/*` entry is required: Hono's `use` without a wildcard does NOT match
+// sub-paths, so /me/password and /me/avatar would be unauthenticated without it.
 app.use('/api/v1/identity/me', authMiddleware());
+app.use('/api/v1/identity/me/*', authMiddleware());
 app.route('/api/v1/identity', identityRoutes);
 
 // Public branding lookup for anonymous visitors on a white-labelled custom domain.

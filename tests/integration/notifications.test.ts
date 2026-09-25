@@ -122,7 +122,7 @@ function buildApp(router: unknown, path: string) {
 }
 
 function authHeaders(roleHeader?: string) {
-  const token = signToken({ sub: 'u1', email: 'u@t.com' });
+  const token = signToken({ sub: 'u1', username: 'u' });
   return {
     Authorization: `Bearer ${token}`,
     'x-organization-id': 'org-a',
@@ -151,14 +151,14 @@ beforeEach(() => {
 describe('notification producers emit org+user scoped rows (P1-5)', () => {
   it('member invite notifies the invited user', async () => {
     const state = baseState({
-      inviteUser: { id: 'u2', email: 'new@x.com', name: 'New' },
+      inviteUser: { id: 'u2', username: 'new', name: 'New' },
     });
     mockDbOrdered(state);
     const app = buildApp(accessControl, '/access-control');
     const res = await app.request('/access-control/invite', {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ email: 'new@x.com', role: 'member' }),
+      body: JSON.stringify({ username: 'new', role: 'member' }),
     });
     expect(res.status).toBe(201);
     const notif = state.inserts.find((i) => i.table === notifications);

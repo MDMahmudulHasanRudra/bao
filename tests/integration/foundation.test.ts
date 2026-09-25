@@ -68,7 +68,7 @@ function buildApp(role: string) {
 }
 
 function authHeaders(_role?: string) {
-  const token = signToken({ sub: 'u1', email: 'u@t.com' });
+  const token = signToken({ sub: 'u1', username: 'u' });
   return {
     Authorization: `Bearer ${token}`,
     'x-organization-id': 'org-1',
@@ -694,7 +694,7 @@ describe('a11y / responsive sweep (R-009)', () => {
     expect(src).toMatch(/tabIndex=\{-1\}/);
   });
 
-  it('layout header is responsive and keeps email for screen readers on mobile', () => {
+  it('layout header is responsive and keeps the username for screen readers on mobile', () => {
     const src = readFileSync(layoutPath, 'utf-8');
     expect(src).toMatch(/px-4 py-3 sm:px-6/);
     expect(src).toMatch(/sr-only[^"]*sm:not-sr-only/);

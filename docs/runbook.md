@@ -11,7 +11,7 @@
 | Redis    | `:6379`                | Queues + cache                 |
 | MinIO    | `:9000` / console `:9001` | Object storage             |
 
-Demo login (dev only): `demo@businessaios.com` / `demo1234`.
+Demo login (dev only): `demo` / `demo1234`. Sign-in is by username, not email.
 
 Start: `pnpm docker:up` · Stop: `pnpm docker:down` · Logs: `pnpm docker:logs`
 

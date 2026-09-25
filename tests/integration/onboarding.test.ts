@@ -123,7 +123,7 @@ describe('register — workspace + invite onboarding (completion slice A)', () =
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        email: 'new@example.com',
+        username: 'newuser',
         password: 'password123',
         name: 'New User',
       }),
@@ -139,7 +139,7 @@ describe('register — workspace + invite onboarding (completion slice A)', () =
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        email: 'founder@example.com',
+        username: 'founder',
         password: 'password123',
         name: 'Founder',
         organizationName: 'Acme Labs',
@@ -153,7 +153,7 @@ describe('register — workspace + invite onboarding (completion slice A)', () =
     const userInsert = state.inserts.find((i) => i.table === users);
     const orgInsert = state.inserts.find((i) => i.table === organizations);
     const membershipInserts = state.inserts.filter((i) => i.table === memberships);
-    expect(userInsert?.row.email).toBe('founder@example.com');
+    expect(userInsert?.row.username).toBe('founder');
     expect(orgInsert?.row.name).toBe('Acme Labs');
     expect(typeof orgInsert?.row.slug).toBe('string');
     expect(membershipInserts).toHaveLength(1);
@@ -165,7 +165,7 @@ describe('register — workspace + invite onboarding (completion slice A)', () =
       invite: {
         id: 'inv-1',
         token: 'tok-abc',
-        email: 'invitee@example.com',
+        username: 'invitee',
         role: 'sales',
         organizationId: 'org-1',
         invitedBy: 'u-owner',
@@ -181,7 +181,7 @@ describe('register — workspace + invite onboarding (completion slice A)', () =
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        email: 'invitee@example.com',
+        username: 'invitee',
         password: 'password123',
         name: 'Invitee',
         inviteToken: 'tok-abc',
@@ -206,7 +206,7 @@ describe('register — workspace + invite onboarding (completion slice A)', () =
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        email: 'x@example.com',
+        username: 'xuser',
         password: 'password123',
         name: 'X',
         inviteToken: 'missing',
@@ -215,12 +215,12 @@ describe('register — workspace + invite onboarding (completion slice A)', () =
     expect(res.status).toBe(404);
   });
 
-  it('register invite email mismatch → 422', async () => {
+  it('register invite username mismatch → 422', async () => {
     const state = baseState({
       invite: {
         id: 'inv-2',
         token: 'tok-xyz',
-        email: 'expected@example.com',
+        username: 'expected',
         role: 'member',
         organizationId: 'org-1',
         acceptedAt: null,
@@ -234,7 +234,7 @@ describe('register — workspace + invite onboarding (completion slice A)', () =
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        email: 'other@example.com',
+        username: 'other',
         password: 'password123',
         name: 'Other',
         inviteToken: 'tok-xyz',
@@ -252,7 +252,7 @@ describe('register — workspace + invite onboarding (completion slice A)', () =
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        email: 'weak@example.com',
+        username: 'weak',
         password: 'short',
         name: 'Weak',
         organizationName: 'W',
@@ -263,12 +263,12 @@ describe('register — workspace + invite onboarding (completion slice A)', () =
 });
 
 describe('public invite peek (completion slice A)', () => {
-  it('returns email/role/org for a valid token', async () => {
+  it('returns username/role/org for a valid token', async () => {
     const state = baseState({
       invite: {
         id: 'inv-3',
         token: 'tok-ok',
-        email: 'peek@example.com',
+        username: 'peek',
         role: 'manager',
         organizationId: 'org-1',
         acceptedAt: null,
@@ -281,9 +281,9 @@ describe('public invite peek (completion slice A)', () => {
     const app = buildIdentityApp();
     const res = await app.request('/identity/invites/tok-ok');
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { email: string; role: string; organizationName: string };
+    const body = (await res.json()) as { username: string; role: string; organizationName: string };
     expect(body).toMatchObject({
-      email: 'peek@example.com',
+      username: 'peek',
       role: 'manager',
       organizationName: 'Peek Org',
     });
@@ -301,7 +301,7 @@ describe('public invite peek (completion slice A)', () => {
       invite: {
         id: 'inv-4',
         token: 'tok-done',
-        email: 'a@b.com',
+        username: 'abc',
         role: 'member',
         organizationId: 'org-1',
         acceptedAt: new Date(),

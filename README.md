@@ -40,7 +40,7 @@ pnpm db:seed
 pnpm dev
 ```
 
-Local stack: API `http://localhost:5000`, web `http://localhost:3000`. Demo login: `demo@businessaios.com` / `demo1234` (dev only).
+Local stack: API `http://localhost:5000`, web `http://localhost:3000`. Demo login: `demo` / `demo1234` (dev only). Login is username-based; email is not an auth identifier.
 
 **pnpm note:** if `pnpm <script>` is blocked (prisma approve-builds), run tools directly, e.g. `node node_modules/typescript/bin/tsc --build`, `node node_modules/vitest/vitest.mjs run` from repo root.
 

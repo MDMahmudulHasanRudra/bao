@@ -11,7 +11,7 @@ function RegisterForm() {
   const inviteToken = params.get('invite') || undefined;
 
   const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [workspaceName, setWorkspaceName] = useState('');
   const [error, setError] = useState('');
@@ -25,7 +25,7 @@ function RegisterForm() {
     try {
       await register({
         name: name.trim(),
-        email: email.trim(),
+        username: username.trim(),
         password,
         inviteToken,
         organizationName: inviteToken ? undefined : workspaceName.trim(),
@@ -75,18 +75,25 @@ function RegisterForm() {
               />
             </div>
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-slate-700">
-                Email
+              <label htmlFor="username" className="block text-sm font-medium text-slate-700">
+                Username
               </label>
               <input
-                id="email"
-                type="email"
+                id="username"
+                type="text"
                 required
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                minLength={3}
+                maxLength={32}
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
               />
+              <p className="mt-1 text-xs text-slate-500">
+                3&ndash;32 characters. Letters, digits, dot, dash and underscore.
+              </p>
             </div>
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-slate-700">

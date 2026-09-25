@@ -7,7 +7,17 @@ const ORG_NAME_KEY = 'bao_org_name';
 const USER_KEY = 'bao_user';
 const MEMBERSHIPS_KEY = 'bao_memberships';
 
-export type SessionUser = { id: string; email: string; name: string; avatarUrl?: string };
+export type SessionUser = {
+  id: string;
+  username: string;
+  name: string;
+  avatarUrl?: string | null;
+  jobTitle?: string | null;
+  team?: string | null;
+  phone?: string | null;
+  timezone?: string | null;
+  bio?: string | null;
+};
 export type Membership = {
   id: string;
   role: string;
@@ -82,6 +92,29 @@ export function clearSession() {
   sessionStorage.removeItem(MEMBERSHIPS_KEY);
 }
 
+// Keeps the header avatar/name in sync after a profile save, no reload needed.
+export const USER_UPDATED_EVENT = 'bao:user-updated';
+
+export function updateSessionUser(patch: Partial<SessionUser>) {
+  const current = getUser();
+  if (!current) return;
+  sessionStorage.setItem(USER_KEY, JSON.stringify({ ...current, ...patch }));
+  window.dispatchEvent(new Event(USER_UPDATED_EVENT));
+}
+
+export type FieldErrors = Record<string, string>;
+
+// Field-level messages come back on error.details, not error.message.
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly fields: FieldErrors = {},
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 // ponytail: sessionStorage bearer (tab-scoped). Cookie/HttpOnly BFF is the hardening upgrade.
 export async function api<T>(
   path: string,
@@ -106,11 +139,11 @@ export async function api<T>(
           : JSON.stringify(options.body),
   });
   const data = (await res.json().catch(() => ({}))) as T & {
-    error?: { message?: string };
+    error?: { message?: string; details?: Record<string, string> };
   };
   if (!res.ok) {
     if (res.status === 401 && options.auth !== false) clearSession();
-    throw new Error(data?.error?.message || `Request failed (${res.status})`);
+    throw new ApiError(data?.error?.message || `Request failed (${res.status})`, data?.error?.details || {});
   }
   return data;
 }
@@ -137,10 +170,10 @@ async function establishSession(token: string, user: SessionUser, preferOrgId?: 
   return { user, memberships };
 }
 
-export async function login(email: string, password: string) {
+export async function login(username: string, password: string) {
   const res = await api<{ user: SessionUser; token: string }>('/api/v1/identity/login', {
     method: 'POST',
-    body: { email, password },
+    body: { username: username.trim(), password },
     auth: false,
   });
   return establishSession(res.token, res.user);
@@ -148,7 +181,7 @@ export async function login(email: string, password: string) {
 
 export async function register(input: {
   name: string;
-  email: string;
+  username: string;
   password: string;
   inviteToken?: string;
   organizationName?: string;
@@ -164,4 +197,39 @@ export async function register(input: {
 
 export function inviteRegisterPath(token: string): string {
   return `/register?invite=${encodeURIComponent(token)}`;
+}
+
+export type ProfileInput = Partial<
+  Pick<SessionUser, 'name' | 'jobTitle' | 'team' | 'phone' | 'timezone' | 'bio'>
+>;
+
+export async function fetchProfile() {
+  return api<{ user: SessionUser; memberships: Membership[] }>('/api/v1/identity/me');
+}
+
+export async function updateProfile(input: ProfileInput) {
+  const res = await api<{ user: SessionUser }>('/api/v1/identity/me', {
+    method: 'PATCH',
+    body: input,
+  });
+  updateSessionUser(res.user);
+  return res.user;
+}
+
+export async function changePassword(currentPassword: string, newPassword: string) {
+  return api<{ success: boolean }>('/api/v1/identity/me/password', {
+    method: 'POST',
+    body: { currentPassword, newPassword },
+  });
+}
+
+export async function uploadAvatar(file: File) {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await api<{ avatarUrl: string }>('/api/v1/identity/me/avatar', {
+    method: 'POST',
+    body: form,
+  });
+  updateSessionUser({ avatarUrl: res.avatarUrl });
+  return res.avatarUrl;
 }

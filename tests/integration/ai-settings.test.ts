@@ -107,7 +107,7 @@ function buildApp(membership: { userId: string; organizationId: string; role: st
 }
 
 function authHeaders(_role?: string) {
-  const token = signToken({ sub: 'user-1', email: 'u@x.com' });
+  const token = signToken({ sub: 'user-1', username: 'u' });
   return {
     Authorization: `Bearer ${token}`,
     'x-organization-id': 'org-a',

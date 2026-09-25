@@ -13,7 +13,7 @@ async function seed() {
   const [existing] = await db
     .select({ id: schema.users.id })
     .from(schema.users)
-    .where(eq(schema.users.email, 'demo@businessaios.com'))
+    .where(eq(schema.users.username, 'demo'))
     .limit(1);
 
   if (existing) {
@@ -35,14 +35,13 @@ async function seed() {
   const [user] = await db
     .insert(schema.users)
     .values({
-      email: 'demo@businessaios.com',
+      username: 'demo',
       passwordHash,
       name: 'Demo User',
-      emailVerifiedAt: new Date(),
     })
     .returning();
 
-  console.log(`Created user: ${user.email} (${user.id})`);
+  console.log(`Created user: ${user.username} (${user.id})`);
 
   await db.insert(schema.memberships).values({
     userId: user.id,
@@ -60,10 +59,9 @@ async function seed() {
   const [user2] = await db
     .insert(schema.users)
     .values({
-      email: 'other@businessaios.com',
+      username: 'other',
       passwordHash,
       name: 'Other User',
-      emailVerifiedAt: new Date(),
     })
     .returning();
 

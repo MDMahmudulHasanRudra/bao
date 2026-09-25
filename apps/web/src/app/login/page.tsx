@@ -32,7 +32,7 @@ const DEFAULT_SECONDARY = '#7c3aed';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('demo@businessaios.com');
+  const [username, setUsername] = useState('demo');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
@@ -75,7 +75,7 @@ export default function LoginPage() {
     setError('');
     setPending(true);
     try {
-      await login(email.trim(), password);
+      await login(username.trim(), password);
       router.replace('/dashboard');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
@@ -120,16 +120,20 @@ export default function LoginPage() {
 
           <form className="mt-6 space-y-4" onSubmit={onSubmit}>
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-slate-700">
-                Email
+              <label htmlFor="username" className="block text-sm font-medium text-slate-700">
+                Username
               </label>
               <input
-                id="email"
-                type="email"
+                id="username"
+                type="text"
                 required
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                minLength={3}
+                maxLength={32}
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
               />
             </div>

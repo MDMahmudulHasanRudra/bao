@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, getToken, inviteRegisterPath } from '@/lib/api';
 
 type InviteInfo = {
-  email: string;
+  username: string;
   role: string;
   organizationName: string;
   expiresAt: string;
@@ -111,8 +111,8 @@ export default function InvitePage() {
         <h1 className="mt-1 text-xl font-semibold text-slate-900">Join {info.organizationName}</h1>
         <dl className="mt-4 space-y-2 text-sm">
           <div className="flex justify-between gap-3">
-            <dt className="text-slate-500">Email</dt>
-            <dd className="font-medium text-slate-800">{info.email}</dd>
+            <dt className="text-slate-500">Username</dt>
+            <dd className="font-medium text-slate-800">{info.username}</dd>
           </div>
           <div className="flex justify-between gap-3">
             <dt className="text-slate-500">Role</dt>
@@ -161,7 +161,7 @@ export default function InvitePage() {
           </Link>
         </div>
         <p className="mt-4 text-center text-xs text-slate-500">
-          Invited to a different account? Sign in with that email first.
+          Invited to a different account? Sign in with that username first.
         </p>
       </div>
     </main>

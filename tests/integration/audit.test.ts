@@ -84,7 +84,7 @@ function buildApp(role: string, events: Record<string, unknown>[] = []) {
 }
 
 function authHeaders(orgId = 'org-a') {
-  const token = signToken({ sub: 'u1', email: 'u@t.com' });
+  const token = signToken({ sub: 'u1', username: 'u' });
   return {
     Authorization: `Bearer ${token}`,
     'x-organization-id': orgId,

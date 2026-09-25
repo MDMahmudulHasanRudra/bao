@@ -9,12 +9,12 @@ type Member = {
   joinedAt: string;
   userId: string;
   name: string;
-  email: string;
+  username: string;
 };
 
 type PendingInvite = {
   id: string;
-  email: string;
+  username: string;
   role: string;
   token: string;
   expiresAt: string;
@@ -42,9 +42,9 @@ export default function MembersSettingsPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [invites, setInvites] = useState<PendingInvite[]>([]);
   const [busy, setBusy] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteUsername, setInviteUsername] = useState('');
   const [inviteRole, setInviteRole] = useState('member');
-  const [newInvite, setNewInvite] = useState<{ url: string; email: string } | null>(null);
+  const [newInvite, setNewInvite] = useState<{ url: string; username: string } | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -83,16 +83,16 @@ export default function MembersSettingsPage() {
     try {
       const res = await api<{ membership?: Member; invitePath?: string; invite?: PendingInvite }>(
         '/api/v1/access-control/invite',
-        { method: 'POST', body: { email: inviteEmail.trim(), role: inviteRole } },
+        { method: 'POST', body: { username: inviteUsername.trim(), role: inviteRole } },
       );
       if (res.invitePath && res.invite) {
         const url = inviteUrl(res.invite.token);
-        setNewInvite({ url, email: res.invite.email });
-        flashMsg(`Invite link ready for ${res.invite.email} — copy and share it.`);
+        setNewInvite({ url, username: res.invite.username });
+        flashMsg(`Invite link ready for ${res.invite.username} — copy and share it.`);
       } else {
-        flashMsg(`${inviteEmail.trim()} added to the workspace.`);
+        flashMsg(`${inviteUsername.trim()} added to the workspace.`);
       }
-      setInviteEmail('');
+      setInviteUsername('');
       await load();
     } catch (err) {
       flashMsg(errMsg(err), false);
@@ -108,7 +108,7 @@ export default function MembersSettingsPage() {
         method: 'PUT',
         body: { role },
       });
-      flashMsg(`${member.name || member.email} is now ${role}.`);
+      flashMsg(`${member.name || member.username} is now ${role}.`);
       await load();
     } catch (err) {
       flashMsg(errMsg(err), false);
@@ -117,11 +117,11 @@ export default function MembersSettingsPage() {
   }
 
   async function removeMember(member: Member) {
-    if (!window.confirm(`Remove ${member.email} from this workspace?`)) return;
+    if (!window.confirm(`Remove ${member.username} from this workspace?`)) return;
     setFlash(null);
     try {
       await api(`/api/v1/access-control/members/${member.id}`, { method: 'DELETE' });
-      flashMsg(`${member.email} removed.`);
+      flashMsg(`${member.username} removed.`);
       await load();
     } catch (err) {
       flashMsg(errMsg(err), false);
@@ -132,7 +132,7 @@ export default function MembersSettingsPage() {
     setFlash(null);
     try {
       await api(`/api/v1/access-control/invites/${invite.id}`, { method: 'DELETE' });
-      flashMsg(`Invite for ${invite.email} revoked.`);
+      flashMsg(`Invite for ${invite.username} revoked.`);
       await load();
     } catch (err) {
       flashMsg(errMsg(err), false);
@@ -205,16 +205,20 @@ export default function MembersSettingsPage() {
           <h2 className="text-sm font-semibold text-slate-800">Invite to workspace</h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_10rem_auto]">
             <div>
-              <label htmlFor="inviteEmail" className="block text-xs font-medium text-slate-600">
-                Email
+              <label htmlFor="inviteUsername" className="block text-xs font-medium text-slate-600">
+                Username
               </label>
               <input
-                id="inviteEmail"
-                type="email"
+                id="inviteUsername"
+                type="text"
                 required
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                placeholder="teammate@example.com"
+                minLength={3}
+                maxLength={32}
+                autoCapitalize="none"
+                spellCheck={false}
+                value={inviteUsername}
+                onChange={(e) => setInviteUsername(e.target.value)}
+                placeholder="teammate"
                 className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
               />
             </div>
@@ -246,13 +250,13 @@ export default function MembersSettingsPage() {
             </div>
           </div>
           <p className="text-xs text-slate-500">
-            Existing accounts are added instantly (they get a notification). New emails get a 7-day
+            Existing accounts are added instantly (they get a notification). New usernames get a 7-day
             invite link to copy.
           </p>
           {newInvite && (
             <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3">
               <p className="text-xs font-medium text-indigo-800">
-                Invite link for {newInvite.email}
+                Invite link for {newInvite.username}
               </p>
               <div className="mt-2 flex flex-col gap-2 sm:flex-row">
                 <input
@@ -303,12 +307,12 @@ export default function MembersSettingsPage() {
                       {m.name}
                       {isSelf && <span className="ml-1 text-xs text-slate-400">(you)</span>}
                     </p>
-                    <p className="text-xs text-slate-500">{m.email}</p>
+                    <p className="text-xs text-slate-500">{m.username}</p>
                   </td>
                   <td className="px-4 py-3">
                     {canManage && !isSelf && m.role !== 'owner' ? (
                       <select
-                        aria-label={`Role for ${m.email}`}
+                        aria-label={`Role for ${m.username}`}
                         value={m.role}
                         onChange={(e) => void changeRole(m, e.target.value)}
                         className="cursor-pointer rounded-lg border border-slate-200 px-2 py-1 text-xs"
@@ -358,7 +362,7 @@ export default function MembersSettingsPage() {
                 className="flex flex-col gap-2 border-b border-slate-100 pb-3 last:border-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-slate-800">{inv.email}</p>
+                  <p className="truncate text-sm font-medium text-slate-800">{inv.username}</p>
                   <p className="text-xs text-slate-500">
                     {inv.role} · expires {new Date(inv.expiresAt).toLocaleDateString()}
                   </p>

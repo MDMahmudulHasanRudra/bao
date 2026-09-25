@@ -190,19 +190,19 @@ describe('permission matrix — foundation entries', () => {
 
 describe('Authentication — JWT', () => {
   it('signs and verifies a token round-trip', () => {
-    const token = signToken({ sub: 'user-123', email: 'a@b.com' });
+    const token = signToken({ sub: 'user-123', username: 'u' });
     const payload = verifyToken(token);
     expect(payload.sub).toBe('user-123');
-    expect(payload.email).toBe('a@b.com');
+    expect(payload.username).toBe('u');
   });
 
   it('rejects a token signed with a different secret', () => {
-    const badToken = jwt.sign({ sub: 'x', email: 'x@y.z' }, 'wrong-secret-at-least-32-chars-long!');
+    const badToken = jwt.sign({ sub: 'x', username: 'u' }, 'wrong-secret-at-least-32-chars-long!');
     expect(() => verifyToken(badToken)).toThrow();
   });
 
   it('rejects a tampered token payload', () => {
-    const token = signToken({ sub: 'user-123', email: 'a@b.com' });
+    const token = signToken({ sub: 'user-123', username: 'u' });
     const parts = token.split('.');
     const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString());
     payload.sub = 'attacker';
@@ -211,7 +211,7 @@ describe('Authentication — JWT', () => {
   });
 
   it('rejects an expired token', () => {
-    const expired = jwt.sign({ sub: 'u', email: 'e@x.com' }, process.env.JWT_SECRET!, {
+    const expired = jwt.sign({ sub: 'u', username: 'u' }, process.env.JWT_SECRET!, {
       expiresIn: '-1s',
     });
     expect(() => verifyToken(expired)).toThrow();
@@ -230,7 +230,7 @@ describe('Authentication — JWT', () => {
   });
 
   it('authMiddleware sets userId on valid token', async () => {
-    const token = signToken({ sub: 'user-99', email: 'u@t.com' });
+    const token = signToken({ sub: 'user-99', username: 'u' });
     const mw = authMiddleware();
     const set = vi.fn();
     const c = { req: { header: () => `Bearer ${token}` }, set };

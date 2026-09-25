@@ -140,7 +140,7 @@ function buildPublicApp(row: Row | null) {
 
 function authHeaders() {
   return {
-    Authorization: `Bearer ${signToken({ sub: 'u1', email: 'u@t.com' })}`,
+    Authorization: `Bearer ${signToken({ sub: 'u1', username: 'u' })}`,
     'x-organization-id': 'org-1',
   };
 }

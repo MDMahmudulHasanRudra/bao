@@ -63,7 +63,7 @@ describe('Full flow — auth + tenancy gate', () => {
 
   it('rejects request without x-organization-id header', async () => {
     const app = buildProtectedApp({ userId: 'u1', organizationId: 'org-a', role: 'admin' });
-    const token = signToken({ sub: 'u1', email: 'u@x.com' });
+    const token = signToken({ sub: 'u1', username: 'u' });
     const res = await app.request('/secret', {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -72,7 +72,7 @@ describe('Full flow — auth + tenancy gate', () => {
 
   it('rejects user who is not a member of the organization', async () => {
     const app = buildProtectedApp(null);
-    const token = signToken({ sub: 'u1', email: 'u@x.com' });
+    const token = signToken({ sub: 'u1', username: 'u' });
     const res = await app.request('/secret', {
       headers: { Authorization: `Bearer ${token}`, 'x-organization-id': 'org-b' },
     });
@@ -83,7 +83,7 @@ describe('Full flow — auth + tenancy gate', () => {
 
   it('allows member with valid token and org header', async () => {
     const app = buildProtectedApp({ userId: 'u1', organizationId: 'org-a', role: 'admin' });
-    const token = signToken({ sub: 'u1', email: 'u@x.com' });
+    const token = signToken({ sub: 'u1', username: 'u' });
     const res = await app.request('/secret', {
       headers: { Authorization: `Bearer ${token}`, 'x-organization-id': 'org-a' },
     });
@@ -95,7 +95,7 @@ describe('Full flow — auth + tenancy gate', () => {
 
   it('tenant context uses membership role, not a client-supplied header', async () => {
     const app = buildProtectedApp({ userId: 'u1', organizationId: 'org-a', role: 'viewer' });
-    const token = signToken({ sub: 'u1', email: 'u@x.com' });
+    const token = signToken({ sub: 'u1', username: 'u' });
     const res = await app.request('/secret', {
       headers: {
         Authorization: `Bearer ${token}`,

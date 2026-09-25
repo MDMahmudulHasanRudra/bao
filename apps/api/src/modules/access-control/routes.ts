@@ -2,7 +2,8 @@ import { Hono } from 'hono';
 import { randomBytes } from 'node:crypto';
 import { getDb } from '../../db/index.js';
 import { memberships, users, invites, organizations, auditEvents } from '../../db/schema.js';
-import { eq, and, count, ilike, gt, isNull } from 'drizzle-orm';
+import { eq, and, count, gt, isNull } from 'drizzle-orm';
+import { isValidUsername, normalizeUsername } from '../../core/validation/username.js';
 import {
   NotFoundError,
   ForbiddenError,
@@ -78,7 +79,7 @@ accessControl.get('/members', async (c) => {
       joinedAt: memberships.joinedAt,
       userId: users.id,
       name: users.name,
-      email: users.email,
+      username: users.username,
     })
     .from(memberships)
     .innerJoin(users, eq(memberships.userId, users.id))
@@ -93,7 +94,7 @@ accessControl.get('/invites', requirePermission('members.manage'), async (c) => 
   const pending = await db
     .select({
       id: invites.id,
-      email: invites.email,
+      username: invites.username,
       role: invites.role,
       token: invites.token,
       expiresAt: invites.expiresAt,
@@ -123,7 +124,7 @@ accessControl.delete('/invites/:id', requirePermission('members.manage'), async 
   if (!invite) throw new NotFoundError('Invite', id);
   if (invite.acceptedAt) throw new ConflictError('Invite already accepted');
   await db.update(invites).set({ revokedAt: new Date() }).where(eq(invites.id, id));
-  await audit(c, 'member.invite_revoke', 'invite', id, { email: invite.email });
+  await audit(c, 'member.invite_revoke', 'invite', id, { username: invite.username });
   return c.json({ success: true });
 });
 
@@ -138,12 +139,12 @@ accessControl.post('/invites/:token/accept', async (c) => {
   }
 
   const [me] = await db
-    .select({ email: users.email })
+    .select({ username: users.username })
     .from(users)
     .where(eq(users.id, tenant.userId))
     .limit(1);
-  if (!me || invite.email.toLowerCase() !== me.email.toLowerCase()) {
-    throw new ForbiddenError('This invite was issued to a different email address');
+  if (!me || invite.username !== me.username) {
+    throw new ForbiddenError('This invite was issued to a different username');
   }
 
   const [existing] = await db
@@ -178,7 +179,7 @@ accessControl.post('/invites/:token/accept', async (c) => {
       action: 'member.invite_accept',
       resourceType: 'membership',
       resourceId: membership.id,
-      details: { email: invite.email, role: invite.role },
+      details: { username: invite.username, role: invite.role },
     });
   } catch {
     // Audit should never fail the request
@@ -196,15 +197,16 @@ accessControl.post('/invites/:token/accept', async (c) => {
 accessControl.post('/invite', requirePermission('members.manage'), async (c) => {
   const tenant = getTenant(c);
 
-  const body = await c.req.json<{ email: string; role: string }>();
-  const email = (body.email || '').trim().toLowerCase();
-  if (!email || !email.includes('@'))
-    throw new ValidationError({ email: 'Valid email is required' });
+  const body = await c.req.json<{ username: string; role: string }>();
+  const username = normalizeUsername(body.username);
+  if (!isValidUsername(username)) {
+    throw new ValidationError({ username: '3-32 characters, letters/digits/._- only' });
+  }
   validateRoleChange(tenant.role as ValidRole, body.role, false);
 
   const db = getDb();
 
-  const [user] = await db.select().from(users).where(ilike(users.email, email)).limit(1);
+  const [user] = await db.select().from(users).where(eq(users.username, username)).limit(1);
 
   if (user) {
     const [existing] = await db
@@ -227,7 +229,7 @@ accessControl.post('/invite', requirePermission('members.manage'), async (c) => 
       .returning();
 
     await audit(c, 'member.invite', 'membership', membership.id, {
-      email,
+      username,
       role: body.role,
     });
 
@@ -247,7 +249,7 @@ accessControl.post('/invite', requirePermission('members.manage'), async (c) => 
     .where(
       and(
         eq(invites.organizationId, tenant.organizationId),
-        ilike(invites.email, email),
+        eq(invites.username, username),
         isNull(invites.acceptedAt),
         isNull(invites.revokedAt),
         gt(invites.expiresAt, new Date()),
@@ -256,12 +258,12 @@ accessControl.post('/invite', requirePermission('members.manage'), async (c) => 
     .limit(1);
 
   if (pending) {
-    await audit(c, 'member.invite', 'invite', pending.id, { email, role: pending.role });
+    await audit(c, 'member.invite', 'invite', pending.id, { username, role: pending.role });
     return c.json(
       {
         invite: {
           id: pending.id,
-          email: pending.email,
+          username: pending.username,
           role: pending.role,
           token: pending.token,
           expiresAt: pending.expiresAt,
@@ -278,7 +280,7 @@ accessControl.post('/invite', requirePermission('members.manage'), async (c) => 
     .insert(invites)
     .values({
       organizationId: tenant.organizationId,
-      email,
+      username,
       role: body.role,
       token,
       invitedBy: tenant.userId,
@@ -286,13 +288,13 @@ accessControl.post('/invite', requirePermission('members.manage'), async (c) => 
     })
     .returning();
 
-  await audit(c, 'member.invite', 'invite', invite.id, { email, role: body.role });
+  await audit(c, 'member.invite', 'invite', invite.id, { username, role: body.role });
 
   return c.json(
     {
       invite: {
         id: invite.id,
-        email: invite.email,
+        username: invite.username,
         role: invite.role,
         token: invite.token,
         expiresAt: invite.expiresAt,

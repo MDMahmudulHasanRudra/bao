@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   api,
   clearSession,
@@ -10,6 +10,7 @@ import {
   getOrgId,
   getUser,
   switchOrg,
+  USER_UPDATED_EVENT,
   type Membership,
   type SessionUser,
 } from '@/lib/api';
@@ -103,6 +104,7 @@ const NAV = [
   { href: '/intelligence', label: 'Monitoring', moduleId: 'intelligence' },
   { href: '/lead-intelligence', label: 'Lead Intelligence', moduleId: 'lead-intelligence' },
   { href: '/analytics', label: 'Analytics', moduleId: 'analytics' },
+  { href: '/settings/profile', label: 'My Profile', moduleId: 'settings' },
   { href: '/settings/ai-providers', label: 'AI Providers', moduleId: 'settings' },
   { href: '/settings/integrations', label: 'Integrations', moduleId: 'settings' },
   { href: '/settings/billing', label: 'Billing', moduleId: 'settings' },
@@ -124,12 +126,58 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [orgName, setOrgName] = useState('Workspace');
   const [navOpen, setNavOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [comingSoon, setComingSoon] = useState<{ id: string; name: string }[]>([]);
   const [uiAvailable, setUiAvailable] = useState<Record<string, boolean>>({});
   const [unread, setUnread] = useState(0);
   const [memberships, setMemberships] = useState<Membership[]>([]);
+  const navRef = useRef<HTMLElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => setNavOpen(false), [pathname]);
+  useEffect(() => setMenuOpen(false), [pathname]);
+
+  // A profile save rewrites the cached session user; re-read it so the ribbon updates.
+  useEffect(() => {
+    const sync = () => setUser(getUser());
+    window.addEventListener(USER_UPDATED_EVENT, sync);
+    return () => window.removeEventListener(USER_UPDATED_EVENT, sync);
+  }, []);
+
+  // Account menu: dismiss on outside click or Escape.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [menuOpen]);
+
+  // The nav scrolls independently, so a deep link like /settings/audit can leave the active
+  // item below the fold with no visible selection. Reveal it on every route change.
+  useEffect(() => {
+    navRef.current
+      ?.querySelector<HTMLElement>('[aria-current="page"]')
+      ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [pathname]);
+
+  // Keyboard dismissal for the mobile drawer.
+  useEffect(() => {
+    if (!navOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setNavOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [navOpen]);
 
   useEffect(() => {
     if (!ready) return;
@@ -183,7 +231,7 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
+    <div className="flex h-dvh overflow-hidden bg-slate-50">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded-lg focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-indigo-700 focus:shadow-lg"
@@ -202,9 +250,9 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
         id="workspace-nav"
         className={`${
           navOpen ? 'flex' : 'hidden'
-        } fixed inset-y-0 left-0 z-40 w-60 shrink-0 flex-col bg-[#0b1220] text-slate-200 md:static md:flex`}
+        } fixed inset-y-0 left-0 z-40 w-60 shrink-0 flex-col bg-[#0b1220] text-slate-200 md:static md:flex md:min-h-0`}
       >
-        <div className="flex items-center gap-2 px-4 py-5">
+        <div className="flex shrink-0 items-center gap-2 px-4 py-5">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-sm font-bold text-white">
             B
           </div>
@@ -214,7 +262,7 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
           </div>
         </div>
 
-        <div className="mx-3 mb-4 rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2">
+        <div className="mx-3 mb-4 shrink-0 rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2">
           {memberships.length > 1 ? (
             <>
               <label htmlFor="org-switcher" className="sr-only">
@@ -251,7 +299,11 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
           )}
         </div>
 
-        <nav className="flex-1 space-y-1 px-2" aria-label="Primary">
+        <nav
+          ref={navRef}
+          className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain px-2"
+          aria-label="Primary"
+        >
           {NAV.map((item) => {
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
             const noUi = item.moduleId in uiAvailable && !uiAvailable[item.moduleId];
@@ -286,7 +338,7 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
           })}
         </nav>
 
-        <div className="px-4 pb-3">
+        <div className="shrink-0 px-4 pb-3">
           <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
             Coming Soon
           </p>
@@ -303,13 +355,13 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
           </ul>
         </div>
 
-        <div className="border-t border-slate-800 p-3 text-[11px] text-slate-400">
+        <div className="shrink-0 border-t border-slate-800 p-3 text-[11px] text-slate-400">
           Business AI OS · v1.0.0
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between gap-4 border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <header className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <button
               type="button"
@@ -338,27 +390,64 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
           </div>
           <div className="flex items-center gap-3">
             <span className="sr-only text-sm text-slate-500 sm:not-sr-only sm:inline">
-              {user?.email}
+              {user?.username}
             </span>
-            <div
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-xs font-semibold text-indigo-700"
-              title={user?.name}
-            >
-              {(user?.name || user?.email || '?').slice(0, 1).toUpperCase()}
+            <div className="relative" ref={menuRef}>
+              <button
+                type="button"
+                onClick={() => setMenuOpen((v) => !v)}
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                aria-label="Account menu"
+                title={user?.name || 'Account'}
+                className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-indigo-100 text-xs font-semibold text-indigo-700 ring-indigo-200 transition hover:ring-2 focus:outline-none focus-visible:ring-2"
+              >
+                {user?.avatarUrl ? (
+                  <img src={user.avatarUrl} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  (user?.name || user?.username || '?').slice(0, 1).toUpperCase()
+                )}
+              </button>
+
+              {menuOpen && (
+                <div
+                  role="menu"
+                  className="absolute right-0 z-30 mt-2 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg"
+                >
+                  <div className="border-b border-slate-100 px-3 py-2.5">
+                    <p className="truncate text-sm font-medium text-slate-800">
+                      {user?.name || 'Account'}
+                    </p>
+                    <p className="truncate text-xs text-slate-500">{user?.username}</p>
+                  </div>
+                  <Link
+                    href="/settings/profile"
+                    role="menuitem"
+                    className="block px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                  >
+                    Profile settings
+                  </Link>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      clearSession();
+                      router.replace('/login');
+                    }}
+                    className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                  >
+                    Log out
+                  </button>
+                </div>
+              )}
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                clearSession();
-                router.replace('/login');
-              }}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
-            >
-              Log out
-            </button>
           </div>
         </header>
-        <main id="main-content" tabIndex={-1} className="min-w-0 flex-1 overflow-auto p-4 sm:p-6">
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6"
+        >
           {children}
         </main>
       </div>
