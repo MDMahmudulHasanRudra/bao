@@ -2,14 +2,16 @@
 
 AI-native multi-tenant business operating system for small and mid-sized businesses.
 
+**Delivery status (2026-09-23):** backlog slices P0-1…P2-3 complete — see `../AGENTS.md` then `../business-ai-os-blueprint/state/CURRENT_STATUS.md` (read the START HERE block first). Tests **160/160**.
+
 ## Tech Stack
 
-- **Frontend:** Next.js 14 (App Router) + TypeScript + Tailwind CSS
-- **Backend:** Hono (TypeScript) modular monolith
+- **Frontend:** Next.js 16 (App Router) + React 19 + TypeScript + Tailwind CSS 4
+- **Backend:** Hono (TypeScript) modular monolith — API `:5000`
 - **Database:** PostgreSQL 16 + pgvector
 - **Queue:** Redis + BullMQ
 - **Object Storage:** S3-compatible (MinIO for local dev)
-- **Containerization:** Docker + Docker Compose
+- **Containerization:** Docker + Docker Compose (user rebuilds; agents do not run Docker)
 
 ## Quick Start
 
@@ -38,7 +40,9 @@ pnpm db:seed
 pnpm dev
 ```
 
-The API will be available at `http://localhost:3000` and the web app at `http://localhost:3001`.
+Local stack: API `http://localhost:5000`, web `http://localhost:3000`. Demo login: `demo@businessaios.com` / `demo1234` (dev only).
+
+**pnpm note:** if `pnpm <script>` is blocked (prisma approve-builds), run tools directly, e.g. `node node_modules/typescript/bin/tsc --build`, `node node_modules/vitest/vitest.mjs run` from repo root.
 
 ### Health Endpoints
 

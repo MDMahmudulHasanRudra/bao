@@ -27,6 +27,13 @@ import aiSettingsRoutes from './modules/ai-settings/routes.js';
 import analyticsRoutes from './modules/analytics/routes.js';
 import moduleRegistryRoutes from './modules/module-registry/routes.js';
 import auditRoutes from './modules/audit/routes.js';
+import billingRoutes from './modules/billing/routes.js';
+import automationRoutes from './modules/automation/routes.js';
+import agentMarketplaceRoutes from './modules/agent-marketplace/routes.js';
+import revenueAnalyticsRoutes from './modules/revenue-analytics/routes.js';
+import accountingRoutes from './modules/accounting/routes.js';
+import workflowBuilderRoutes from './modules/workflow-builder/routes.js';
+import whiteLabelRoutes, { publicBrandingRouter } from './modules/white-label/routes.js';
 
 const env = loadEnv();
 const log = getLogger();
@@ -45,6 +52,10 @@ app.get('/ready', readinessHandler);
 // Public routes (login/register); /me needs a bearer token
 app.use('/api/v1/identity/me', authMiddleware());
 app.route('/api/v1/identity', identityRoutes);
+
+// Public branding lookup for anonymous visitors on a white-labelled custom domain.
+// MUST stay outside protectedApp — the login page has no session or org header.
+app.route('/api/v1', publicBrandingRouter);
 
 // Protected routes
 const protectedApp = new Hono();
@@ -67,6 +78,13 @@ protectedApp.route('/ai-settings', aiSettingsRoutes);
 protectedApp.route('/analytics', analyticsRoutes);
 protectedApp.route('/modules', moduleRegistryRoutes);
 protectedApp.route('/audit', auditRoutes);
+protectedApp.route('/billing', billingRoutes);
+protectedApp.route('/automation', automationRoutes);
+protectedApp.route('/agent-marketplace', agentMarketplaceRoutes);
+protectedApp.route('/revenue-analytics', revenueAnalyticsRoutes);
+protectedApp.route('/accounting', accountingRoutes);
+protectedApp.route('/workflow-builder', workflowBuilderRoutes);
+protectedApp.route('/settings/white-label', whiteLabelRoutes);
 
 app.route('/api/v1', protectedApp);
 

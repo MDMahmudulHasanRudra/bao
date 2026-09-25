@@ -3,7 +3,16 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
-import { api, clearSession, getOrgId, getUser, type SessionUser } from '@/lib/api';
+import {
+  api,
+  clearSession,
+  getMemberships,
+  getOrgId,
+  getUser,
+  switchOrg,
+  type Membership,
+  type SessionUser,
+} from '@/lib/api';
 
 const ICONS: Record<string, string[]> = {
   dashboard: ['M3 10.5 12 3l9 7.5V21a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1v-10.5z'],
@@ -30,6 +39,20 @@ const ICONS: Record<string, string[]> = {
   presentations: ['M2 3h20v14H2z', 'M8 21h8', 'M12 17v4'],
   intelligence: ['M22 12h-4l-3 9L9 3l-3 9H2'],
   analytics: ['M3 3v18h18', 'M7 14l4-4 4 4 5-6'],
+  'revenue-analytics': ['M3 3v18h18', 'M7 14l4-4 4 4 5-6', 'M12 8v8M8 12h8'],
+  automation: ['M9 12l2 2 4-4', 'M12 2v20M2 12h20'],
+  billing: [
+    'M21 12V7H5a2 2 0 010-4h14v4',
+    'M3 11.5V18a2 2 0 002 2h14',
+    'M15 11.5h3.5a1.5 1.5 0 010 3H15',
+  ],
+  'agent-marketplace': ['M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z', 'M12 14v4M12 8v4'],
+  accounting: [
+    'M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6',
+    'M4 19.5A2.5 2.5 0 016.5 17H20',
+    'M4 19.5A2.5 2.5 0 006.5 22H20V2H6.5A2.5 2.5 0 004 4.5v15z',
+  ],
+  'workflow-builder': ['M4 4v16M20 4v16M4 12h16M20 4v16M4 4v16'],
   settings: [
     'M4 21v-7',
     'M4 10V3',
@@ -68,13 +91,22 @@ const NAV = [
   { href: '/knowledge', label: 'Knowledge Hub', moduleId: 'knowledge' },
   { href: '/assistant', label: 'AI Assistant', moduleId: 'ai-assistant' },
   { href: '/sales', label: 'Sales', moduleId: 'sales' },
+  { href: '/automation', label: 'Automation', moduleId: 'automation' },
+  { href: '/agent-marketplace', label: 'Agent Marketplace', moduleId: 'agent-marketplace' },
+  { href: '/revenue-analytics', label: 'Revenue Analytics', moduleId: 'revenue-analytics' },
+  { href: '/accounting', label: 'Accounting', moduleId: 'accounting' },
+  { href: '/workflow-builder', label: 'Workflow Builder', moduleId: 'workflow-builder' },
   { href: '/notifications', label: 'Notifications', moduleId: 'notifications' },
   { href: '/proposals', label: 'Proposals', moduleId: 'proposals' },
   { href: '/presentations', label: 'Presentations', moduleId: 'presentations' },
   { href: '/intelligence', label: 'Monitoring', moduleId: 'intelligence' },
   { href: '/analytics', label: 'Analytics', moduleId: 'analytics' },
   { href: '/settings/ai-providers', label: 'AI Providers', moduleId: 'settings' },
+  { href: '/settings/integrations', label: 'Integrations', moduleId: 'settings' },
+  { href: '/settings/billing', label: 'Billing', moduleId: 'settings' },
+  { href: '/settings/members', label: 'Members', moduleId: 'settings' },
   { href: '/settings/organization', label: 'Organization', moduleId: 'settings' },
+  { href: '/settings/white-label', label: 'White Label', moduleId: 'settings' },
   { href: '/settings/audit', label: 'Audit Log', moduleId: 'settings' },
 ];
 
@@ -93,6 +125,7 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
   const [comingSoon, setComingSoon] = useState<{ id: string; name: string }[]>([]);
   const [uiAvailable, setUiAvailable] = useState<Record<string, boolean>>({});
   const [unread, setUnread] = useState(0);
+  const [memberships, setMemberships] = useState<Membership[]>([]);
 
   useEffect(() => setNavOpen(false), [pathname]);
 
@@ -111,6 +144,19 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
     }
     setUser(u);
     setReady(true);
+    const stored = getMemberships();
+    if (stored.length) {
+      setMemberships(stored);
+    } else {
+      api<{ memberships: Membership[] }>('/api/v1/identity/me')
+        .then((me) => {
+          if (me.memberships?.length) {
+            setMemberships(me.memberships);
+            sessionStorage.setItem('bao_memberships', JSON.stringify(me.memberships));
+          }
+        })
+        .catch(() => undefined);
+    }
     const raw = sessionStorage.getItem('bao_org_name');
     if (raw) setOrgName(raw);
 
@@ -136,6 +182,12 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-screen bg-slate-50">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded-lg focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-indigo-700 focus:shadow-lg"
+      >
+        Skip to main content
+      </a>
       {navOpen && (
         <button
           type="button"
@@ -161,8 +213,40 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
         </div>
 
         <div className="mx-3 mb-4 rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2">
-          <p className="truncate text-xs font-medium text-white">{orgName}</p>
-          <p className="text-[11px] text-slate-400">Workspace</p>
+          {memberships.length > 1 ? (
+            <>
+              <label htmlFor="org-switcher" className="sr-only">
+                Switch workspace
+              </label>
+              <select
+                id="org-switcher"
+                value={getOrgId() || ''}
+                onChange={(e) => {
+                  const m = memberships.find((x) => x.organizationId === e.target.value);
+                  if (m && m.organizationId !== getOrgId()) {
+                    switchOrg(m.organizationId, m.orgName);
+                  }
+                }}
+                className="w-full cursor-pointer truncate rounded bg-transparent text-xs font-medium text-white outline-none"
+              >
+                {memberships.map((m) => (
+                  <option
+                    key={m.organizationId}
+                    value={m.organizationId}
+                    className="text-slate-900"
+                  >
+                    {m.orgName}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-slate-400">Switch workspace</p>
+            </>
+          ) : (
+            <>
+              <p className="truncate text-xs font-medium text-white">{orgName}</p>
+              <p className="text-[11px] text-slate-400">Workspace</p>
+            </>
+          )}
         </div>
 
         <nav className="flex-1 space-y-1 px-2" aria-label="Primary">
@@ -201,11 +285,11 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="px-4 pb-3">
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
             Coming Soon
           </p>
-          <ul className="space-y-1.5 text-xs text-slate-500">
-            {comingSoon.length === 0 && <li className="text-slate-600">Nothing announced yet</li>}
+          <ul className="space-y-1.5 text-xs text-slate-400">
+            {comingSoon.length === 0 && <li className="text-slate-400">Nothing announced yet</li>}
             {comingSoon.map((s) => (
               <li key={s.id} className="flex items-center justify-between gap-2">
                 <span className="truncate">{s.name}</span>
@@ -217,13 +301,13 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
           </ul>
         </div>
 
-        <div className="border-t border-slate-800 p-3 text-[11px] text-slate-500">
+        <div className="border-t border-slate-800 p-3 text-[11px] text-slate-400">
           Business AI OS · v1.0.0
         </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between gap-4 border-b border-slate-200 bg-white px-6 py-3">
+        <header className="flex items-center justify-between gap-4 border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <button
               type="button"
@@ -251,7 +335,9 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <span className="hidden text-sm text-slate-500 sm:inline">{user?.email}</span>
+            <span className="sr-only text-sm text-slate-500 sm:not-sr-only sm:inline">
+              {user?.email}
+            </span>
             <div
               className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-xs font-semibold text-indigo-700"
               title={user?.name}
@@ -270,7 +356,9 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
             </button>
           </div>
         </header>
-        <main className="min-w-0 flex-1 overflow-auto p-4 sm:p-6">{children}</main>
+        <main id="main-content" tabIndex={-1} className="min-w-0 flex-1 overflow-auto p-4 sm:p-6">
+          {children}
+        </main>
       </div>
     </div>
   );

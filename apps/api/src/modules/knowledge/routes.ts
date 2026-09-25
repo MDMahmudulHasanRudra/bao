@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { getDb } from '../../db/index.js';
 import { knowledgeSources, knowledgeChunks } from '../../db/schema.js';
-import { eq, and, desc, isNull } from 'drizzle-orm';
+import { eq, and, desc, isNull, sql } from 'drizzle-orm';
 import { NotFoundError, ValidationError } from '../../core/errors/http.js';
 import { getTenant } from '../../core/tenancy/context.js';
 import { audit } from '../audit/service.js';
@@ -23,20 +23,29 @@ const ALLOWED_TYPES = [
   'text/markdown',
 ];
 const MAX_SIZE = 50 * 1024 * 1024; // 50MB
+const KINDS = new Set(['document', 'sop', 'reference']);
+
+function normalizeKind(raw: unknown): string {
+  return typeof raw === 'string' && KINDS.has(raw) ? raw : 'document';
+}
 
 knowledge.get('/', async (c) => {
   const tenant = getTenant(c);
   const db = getDb();
+  const kind = c.req.query('kind');
+
+  const conditions = [
+    eq(knowledgeSources.organizationId, tenant.organizationId),
+    isNull(knowledgeSources.deletedAt),
+  ];
+  if (kind && KINDS.has(kind)) {
+    conditions.push(sql`coalesce(${knowledgeSources.metadata}->>'kind', 'document') = ${kind}`);
+  }
 
   const sources = await db
     .select()
     .from(knowledgeSources)
-    .where(
-      and(
-        eq(knowledgeSources.organizationId, tenant.organizationId),
-        isNull(knowledgeSources.deletedAt),
-      ),
-    )
+    .where(and(...conditions))
     .orderBy(desc(knowledgeSources.createdAt));
 
   return c.json({ sources });
@@ -50,6 +59,7 @@ knowledge.post('/upload', async (c) => {
   const file = formData.get('file') as File | null;
   const title = (formData.get('title') as string) || file?.name || 'Untitled';
   const visibility = (formData.get('visibility') as string) || 'private';
+  const kind = normalizeKind(formData.get('kind'));
 
   if (!file) throw new ValidationError({ file: 'File is required' });
   if (!ALLOWED_TYPES.includes(file.type)) {
@@ -81,6 +91,7 @@ knowledge.post('/upload', async (c) => {
       fileSize: file.size,
       visibility,
       status: 'pending',
+      metadata: { kind },
       uploadedBy: tenant.userId,
     })
     .returning();
@@ -100,7 +111,12 @@ knowledge.post('/upload', async (c) => {
 knowledge.post('/url', async (c) => {
   const tenant = getTenant(c);
   const db = getDb();
-  const body = await c.req.json<{ url: string; title?: string; visibility?: string }>();
+  const body = await c.req.json<{
+    url: string;
+    title?: string;
+    visibility?: string;
+    kind?: string;
+  }>();
   let parsed: URL;
   try {
     parsed = new URL(body.url);
@@ -120,6 +136,7 @@ knowledge.post('/url', async (c) => {
       url: body.url,
       visibility: body.visibility || 'private',
       status: 'pending',
+      metadata: { kind: normalizeKind(body.kind) },
       uploadedBy: tenant.userId,
     })
     .returning();

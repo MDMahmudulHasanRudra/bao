@@ -1,10 +1,11 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { getDb } from '../../db/index.js';
-import { organizations } from '../../db/schema.js';
+import { organizations, aiProviders } from '../../db/schema.js';
 import { eq } from 'drizzle-orm';
 import { NotFoundError, ValidationError } from '../../core/errors/http.js';
 import { getTenant, requirePermission } from '../../core/tenancy/context.js';
+import { getEnv } from '../../core/config/env.js';
 import { audit } from '../audit/service.js';
 
 const settings = new Hono();
@@ -77,6 +78,71 @@ settings.put('/', requirePermission('org.settings.manage'), async (c) => {
   });
 
   return c.json({ settings: updated.settings });
+});
+
+settings.get('/integrations', async (c) => {
+  const tenant = getTenant(c);
+  const db = getDb();
+  const env = getEnv();
+
+  const aiCount = await db
+    .select({ id: aiProviders.id })
+    .from(aiProviders)
+    .where(eq(aiProviders.organizationId, tenant.organizationId));
+
+  const integrations = [
+    {
+      id: 'ai-provider',
+      name: 'AI providers',
+      description: 'Tenant-scoped LLM keys for chat, embeddings, and drafting.',
+      configured: aiCount.length > 0,
+      detail: aiCount.length > 0 ? `${aiCount.length} connected` : 'No keys connected',
+      href: '/settings/ai-providers',
+    },
+    {
+      id: 'presenton',
+      name: 'Presenton',
+      description: 'Slide deck and presentation export.',
+      configured: Boolean(env.PRESENTON_API_URL && env.PRESENTON_API_KEY),
+      detail:
+        env.PRESENTON_API_URL && env.PRESENTON_API_KEY
+          ? 'Configured'
+          : 'Set PRESENTON_API_URL and PRESENTON_API_KEY',
+      href: null,
+    },
+    {
+      id: 'scraplink',
+      name: 'Scraplink',
+      description: 'Website monitoring and scrape jobs.',
+      configured: Boolean(env.SCRAPLINK_API_URL && env.SCRAPLINK_API_KEY),
+      detail:
+        env.SCRAPLINK_API_URL && env.SCRAPLINK_API_KEY
+          ? 'Configured'
+          : 'Set SCRAPLINK_API_URL and SCRAPLINK_API_KEY',
+      href: null,
+    },
+    {
+      id: 'diffy',
+      name: 'Diffy',
+      description: 'Analytics comparison jobs.',
+      configured: Boolean(env.DIFFY_API_URL && env.DIFFY_API_KEY),
+      detail:
+        env.DIFFY_API_URL && env.DIFFY_API_KEY
+          ? 'Configured'
+          : 'Set DIFFY_API_URL and DIFFY_API_KEY',
+      href: null,
+    },
+    {
+      id: 'storage',
+      name: 'Object storage',
+      description: 'File uploads for Knowledge Hub (MinIO / S3).',
+      configured: Boolean(env.STORAGE_ACCESS_KEY && env.STORAGE_SECRET_KEY),
+      detail: 'STORAGE_* credentials',
+      href: null,
+    },
+  ];
+
+  return c.json({ integrations });
 });
 
 export default settings;

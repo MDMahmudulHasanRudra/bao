@@ -13,7 +13,7 @@ export default function WorkspaceError({
       <p className="mt-2 text-sm text-slate-600">
         {error.message || 'Unexpected application error.'}
       </p>
-      {error.digest && <p className="mt-1 text-xs text-slate-400">Ref: {error.digest}</p>}
+      {error.digest && <p className="mt-1 text-xs text-slate-500">Ref: {error.digest}</p>}
       <div className="mt-4 flex flex-wrap gap-2">
         <button
           type="button"

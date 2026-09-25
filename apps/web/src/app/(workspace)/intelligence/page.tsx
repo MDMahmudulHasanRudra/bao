@@ -282,7 +282,7 @@ export default function IntelligencePage() {
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <p className="text-xs font-medium text-slate-500">Unreviewed events</p>
           <p className="mt-1 text-2xl font-semibold text-slate-900">{unreviewed.length}</p>
-          <p className="mt-1 text-xs text-slate-400">
+          <p className="mt-1 text-xs text-slate-500">
             Source: intelligence_events ·{' '}
             {unreviewed.length === 0
               ? 'All caught up'
@@ -292,7 +292,7 @@ export default function IntelligencePage() {
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <p className="text-xs font-medium text-slate-500">Active targets</p>
           <p className="mt-1 text-2xl font-semibold text-slate-900">{activeTargets.length}</p>
-          <p className="mt-1 text-xs text-slate-400">
+          <p className="mt-1 text-xs text-slate-500">
             Source: monitoring_targets ·{' '}
             {activeTargets.length === 0
               ? 'No targets configured'
@@ -302,20 +302,35 @@ export default function IntelligencePage() {
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <p className="text-xs font-medium text-slate-500">Collected with source</p>
           <p className="mt-1 text-2xl font-semibold text-slate-900">{withSource.length}</p>
-          <p className="mt-1 text-xs text-slate-400">
+          <p className="mt-1 text-xs text-slate-500">
             Source: events.sourceUrl ·{' '}
             {latestEvent ? `latest ${relTime(latestEvent.createdAt)}` : 'No collection yet'}
           </p>
         </div>
       </div>
 
-      <div role="tablist" className="flex gap-1 rounded-lg bg-slate-100 p-1 w-fit">
+      <div
+        role="tablist"
+        aria-label="Monitoring sections"
+        className="flex gap-1 rounded-lg bg-slate-100 p-1 w-fit"
+        onKeyDown={(e) => {
+          if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+          e.preventDefault();
+          const order = ['targets', 'events'] as const;
+          const i = order.indexOf(tab);
+          const next = order[(i + (e.key === 'ArrowRight' ? 1 : order.length - 1)) % order.length];
+          setTab(next);
+          document.getElementById(`intel-tab-${next}`)?.focus();
+        }}
+      >
         {(['targets', 'events'] as const).map((t) => (
           <button
             key={t}
+            id={`intel-tab-${t}`}
             type="button"
             role="tab"
             aria-selected={tab === t}
+            aria-controls={`intel-panel-${t}`}
             onClick={() => setTab(t)}
             className={`rounded-md px-4 py-1.5 text-sm font-medium capitalize ${
               tab === t ? 'bg-white text-slate-900 shadow' : 'text-slate-600 hover:text-slate-900'
@@ -327,7 +342,13 @@ export default function IntelligencePage() {
       </div>
 
       {tab === 'targets' && (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div
+          role="tabpanel"
+          id="intel-panel-targets"
+          aria-labelledby="intel-tab-targets"
+          tabIndex={0}
+          className="grid grid-cols-1 gap-6 lg:grid-cols-2"
+        >
           <section className="space-y-3">
             <h2 className="text-sm font-semibold text-slate-800">
               {editingId ? 'Edit target' : 'New target'}
@@ -452,7 +473,7 @@ export default function IntelligencePage() {
                             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
                               {t.type}
                             </span>
-                            <span className="text-xs text-slate-400">
+                            <span className="text-xs text-slate-500">
                               updated {relTime(t.updatedAt)}
                             </span>
                           </div>
@@ -517,7 +538,13 @@ export default function IntelligencePage() {
       )}
 
       {tab === 'events' && (
-        <section className="space-y-3">
+        <section
+          role="tabpanel"
+          id="intel-panel-events"
+          aria-labelledby="intel-tab-events"
+          tabIndex={0}
+          className="space-y-3"
+        >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-semibold text-slate-800">
               Events {events.length > 0 && `(${filteredEvents.length})`}
@@ -592,7 +619,7 @@ export default function IntelligencePage() {
                               Mock
                             </span>
                           )}
-                          <span className="text-xs text-slate-400">
+                          <span className="text-xs text-slate-500">
                             {relTime(ev.createdAt)} · {target?.name || 'unknown target'}
                           </span>
                         </div>
@@ -611,7 +638,7 @@ export default function IntelligencePage() {
                               Source ↗
                             </a>
                           )}
-                          <span className="text-slate-400">
+                          <span className="text-slate-500">
                             Collected {new Date(ev.createdAt).toLocaleString()}
                           </span>
                         </div>

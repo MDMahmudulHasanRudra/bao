@@ -52,6 +52,15 @@ const PERMISSION_MATRIX: Record<string, string[]> = {
   'members.manage': ['owner', 'admin'],
   'intelligence.targets.manage': ['owner', 'admin', 'analyst'],
   'audit.read': ['owner', 'admin'],
+  'revenue-analytics.read': ['owner', 'admin', 'analyst'],
+  'billing.manage': ['owner', 'admin'],
+  'accounting.manage': ['owner', 'admin'],
+  'automation.manage': ['owner', 'admin', 'manager'],
+  'workflow.manage': ['owner', 'admin', 'manager'],
+  'workflow.execute': ['owner', 'admin', 'manager', 'member'],
+  'agent-marketplace.manage': ['owner', 'admin'],
+  'agent-marketplace.install': ['owner', 'admin', 'manager'],
+  'agent-marketplace.review': ['owner', 'admin', 'manager'],
 };
 
 export function hasPermission(role: string, permission: string): boolean {

@@ -68,6 +68,8 @@ type Activity = {
   subject: string;
   body?: string | null;
   leadId?: string | null;
+  dueAt?: string | null;
+  completedAt?: string | null;
   createdAt: string;
   userId: string;
 };
@@ -189,6 +191,17 @@ export default function SalesPage() {
         role="tablist"
         aria-label="Sales sections"
         className="flex flex-wrap gap-1 rounded-lg bg-slate-100 p-1"
+        onKeyDown={(e) => {
+          if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+          e.preventDefault();
+          const order: Tab[] = ['pipeline', 'companies', 'contacts', 'activities'];
+          const i = order.indexOf(tab);
+          const next = order[(i + (e.key === 'ArrowRight' ? 1 : order.length - 1)) % order.length];
+          setTab(next);
+          setActionError(null);
+          setActionSuccess(null);
+          document.getElementById(`sales-tab-${next}`)?.focus();
+        }}
       >
         {(
           [
@@ -200,9 +213,11 @@ export default function SalesPage() {
         ).map(([id, label]) => (
           <button
             key={id}
+            id={`sales-tab-${id}`}
             type="button"
             role="tab"
             aria-selected={tab === id}
+            aria-controls={`sales-panel-${id}`}
             onClick={() => {
               setTab(id);
               setActionError(null);
@@ -234,77 +249,95 @@ export default function SalesPage() {
         </p>
       )}
 
-      {tab === 'pipeline' && (
-        <PipelineTab
-          leads={leads}
-          companies={companies}
-          busy={busy}
-          currentUserId={currentUserId}
-          onMove={(lead, stage) =>
-            run(async () => {
-              await api(`/api/v1/sales/leads/${lead.id}`, { method: 'PUT', body: { stage } });
-            }, `Moved “${lead.title}” to ${STAGE_LABELS[stage]}`)
-          }
-          onCreate={(body) =>
-            run(async () => {
-              await api('/api/v1/sales/leads', { method: 'POST', body });
-            }, 'Lead created')
-          }
-          onDelete={(lead) =>
-            run(async () => {
-              await api(`/api/v1/sales/leads/${lead.id}`, { method: 'DELETE' });
-            }, 'Lead deleted')
-          }
-        />
-      )}
+      <div
+        role="tabpanel"
+        id={`sales-panel-${tab}`}
+        aria-labelledby={`sales-tab-${tab}`}
+        tabIndex={0}
+      >
+        {tab === 'pipeline' && (
+          <PipelineTab
+            leads={leads}
+            companies={companies}
+            busy={busy}
+            currentUserId={currentUserId}
+            onMove={(lead, stage) =>
+              run(async () => {
+                await api(`/api/v1/sales/leads/${lead.id}`, { method: 'PUT', body: { stage } });
+              }, `Moved “${lead.title}” to ${STAGE_LABELS[stage]}`)
+            }
+            onCreate={(body) =>
+              run(async () => {
+                await api('/api/v1/sales/leads', { method: 'POST', body });
+              }, 'Lead created')
+            }
+            onDelete={(lead) =>
+              run(async () => {
+                await api(`/api/v1/sales/leads/${lead.id}`, { method: 'DELETE' });
+              }, 'Lead deleted')
+            }
+          />
+        )}
 
-      {tab === 'companies' && (
-        <CompaniesTab
-          companies={companies}
-          busy={busy}
-          onCreate={(body) =>
-            run(async () => {
-              await api('/api/v1/sales/companies', { method: 'POST', body });
-            }, 'Company created')
-          }
-          onDelete={(c) =>
-            run(async () => {
-              await api(`/api/v1/sales/companies/${c.id}`, { method: 'DELETE' });
-            }, 'Company deleted')
-          }
-        />
-      )}
+        {tab === 'companies' && (
+          <CompaniesTab
+            companies={companies}
+            busy={busy}
+            onCreate={(body) =>
+              run(async () => {
+                await api('/api/v1/sales/companies', { method: 'POST', body });
+              }, 'Company created')
+            }
+            onDelete={(c) =>
+              run(async () => {
+                await api(`/api/v1/sales/companies/${c.id}`, { method: 'DELETE' });
+              }, 'Company deleted')
+            }
+          />
+        )}
 
-      {tab === 'contacts' && (
-        <ContactsTab
-          contacts={contacts}
-          companies={companies}
-          busy={busy}
-          onCreate={(body) =>
-            run(async () => {
-              await api('/api/v1/sales/contacts', { method: 'POST', body });
-            }, 'Contact created')
-          }
-          onDelete={(c) =>
-            run(async () => {
-              await api(`/api/v1/sales/contacts/${c.id}`, { method: 'DELETE' });
-            }, 'Contact deleted')
-          }
-        />
-      )}
+        {tab === 'contacts' && (
+          <ContactsTab
+            contacts={contacts}
+            companies={companies}
+            busy={busy}
+            onCreate={(body) =>
+              run(async () => {
+                await api('/api/v1/sales/contacts', { method: 'POST', body });
+              }, 'Contact created')
+            }
+            onDelete={(c) =>
+              run(async () => {
+                await api(`/api/v1/sales/contacts/${c.id}`, { method: 'DELETE' });
+              }, 'Contact deleted')
+            }
+          />
+        )}
 
-      {tab === 'activities' && (
-        <ActivitiesTab
-          activities={activities}
-          leads={leads}
-          busy={busy}
-          onCreate={(body) =>
-            run(async () => {
-              await api('/api/v1/sales/activities', { method: 'POST', body });
-            }, 'Activity logged')
-          }
-        />
-      )}
+        {tab === 'activities' && (
+          <ActivitiesTab
+            activities={activities}
+            leads={leads}
+            busy={busy}
+            onCreate={(body) =>
+              run(async () => {
+                await api('/api/v1/sales/activities', { method: 'POST', body });
+              }, 'Activity logged')
+            }
+            onToggleComplete={(a) =>
+              run(
+                async () => {
+                  await api(`/api/v1/sales/activities/${a.id}`, {
+                    method: 'PATCH',
+                    body: { completed: !a.completedAt },
+                  });
+                },
+                a.completedAt ? 'Marked open' : 'Marked complete',
+              )
+            }
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -441,7 +474,7 @@ function PipelineTab({
                   <span>{STAGE_LABELS[stage]}</span>
                   <span>{stageLeads.length}</span>
                 </h3>
-                {stageLeads.length === 0 && <p className="text-xs text-slate-400">Empty</p>}
+                {stageLeads.length === 0 && <p className="text-xs text-slate-500">Empty</p>}
                 <ul className="space-y-2">
                   {stageLeads.map((lead) => {
                     const nextStages = TRANSITIONS[lead.stage] ?? [];
@@ -761,16 +794,19 @@ function ActivitiesTab({
   leads,
   busy,
   onCreate,
+  onToggleComplete,
 }: {
   activities: Activity[];
   leads: Lead[];
   busy: boolean;
   onCreate: (body: Record<string, unknown>) => void;
+  onToggleComplete: (a: Activity) => void;
 }) {
   const [type, setType] = useState('call');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [leadId, setLeadId] = useState('');
+  const [dueAt, setDueAt] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
 
   function submit(e: FormEvent) {
@@ -785,10 +821,12 @@ function ActivitiesTab({
       subject: subject.trim(),
       body: body || undefined,
       leadId: leadId || undefined,
+      dueAt: dueAt ? new Date(dueAt).toISOString() : undefined,
     });
     setSubject('');
     setBody('');
     setLeadId('');
+    setDueAt('');
   }
 
   const leadTitle = (id?: string | null) => leads.find((l) => l.id === id)?.title;
@@ -855,6 +893,15 @@ function ActivitiesTab({
               placeholder="Optional details"
             />
           </label>
+          <label className="block text-xs font-medium text-slate-600">
+            Due
+            <input
+              type="datetime-local"
+              value={dueAt}
+              onChange={(e) => setDueAt(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            />
+          </label>
         </div>
         <button
           type="submit"
@@ -874,25 +921,53 @@ function ActivitiesTab({
         </div>
       ) : (
         <ol className="space-y-2">
-          {activities.map((a) => (
-            <li key={a.id} className="rounded-xl border border-slate-200 bg-white p-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded bg-indigo-50 px-2 py-0.5 text-[11px] font-medium uppercase text-indigo-700">
-                  {a.type}
-                </span>
-                <p className="min-w-0 flex-1 truncate text-sm font-medium text-slate-900">
-                  {a.subject}
-                </p>
-                <time className="text-xs text-slate-400" dateTime={a.createdAt}>
-                  {new Date(a.createdAt).toLocaleString()}
-                </time>
-              </div>
-              {a.body && <p className="mt-1 text-sm text-slate-600">{a.body}</p>}
-              {a.leadId && leadTitle(a.leadId) && (
-                <p className="mt-1 text-xs text-slate-500">Lead: {leadTitle(a.leadId)}</p>
-              )}
-            </li>
-          ))}
+          {activities.map((a) => {
+            const overdue = a.dueAt && !a.completedAt && new Date(a.dueAt) < new Date();
+            return (
+              <li key={a.id} className="rounded-xl border border-slate-200 bg-white p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded bg-indigo-50 px-2 py-0.5 text-[11px] font-medium uppercase text-indigo-700">
+                    {a.type}
+                  </span>
+                  <p
+                    className={`min-w-0 flex-1 truncate text-sm font-medium ${
+                      a.completedAt ? 'text-slate-400 line-through' : 'text-slate-900'
+                    }`}
+                  >
+                    {a.subject}
+                  </p>
+                  {a.dueAt && (
+                    <span
+                      className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${
+                        overdue
+                          ? 'bg-rose-50 text-rose-700'
+                          : a.completedAt
+                            ? 'bg-slate-100 text-slate-500'
+                            : 'bg-amber-50 text-amber-700'
+                      }`}
+                    >
+                      {overdue ? 'Overdue' : 'Due'} {new Date(a.dueAt).toLocaleDateString()}
+                    </span>
+                  )}
+                  <time className="text-xs text-slate-500" dateTime={a.createdAt}>
+                    {new Date(a.createdAt).toLocaleString()}
+                  </time>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => onToggleComplete(a)}
+                    className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    {a.completedAt ? 'Reopen' : 'Complete'}
+                  </button>
+                </div>
+                {a.body && <p className="mt-1 text-sm text-slate-600">{a.body}</p>}
+                {a.leadId && leadTitle(a.leadId) && (
+                  <p className="mt-1 text-xs text-slate-500">Lead: {leadTitle(a.leadId)}</p>
+                )}
+              </li>
+            );
+          })}
         </ol>
       )}
     </div>

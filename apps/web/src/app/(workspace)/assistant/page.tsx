@@ -48,6 +48,7 @@ export default function AssistantPage() {
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const loadList = useCallback(async () => {
     setListLoading(true);
@@ -67,6 +68,20 @@ export default function AssistantPage() {
   useEffect(() => {
     void loadList();
   }, [loadList]);
+
+  // Restore active conversation from ?c= URL param (Slice F)
+  useEffect(() => {
+    const c = new URLSearchParams(window.location.search).get('c');
+    if (c) setActiveId(c);
+  }, []);
+
+  const selectConversation = useCallback((id: string) => {
+    setActiveId(id);
+    const url = id
+      ? `${window.location.pathname}?c=${encodeURIComponent(id)}`
+      : window.location.pathname;
+    window.history.replaceState(null, '', url);
+  }, []);
 
   const loadThread = useCallback(async (id: string) => {
     if (!id) {
@@ -103,7 +118,7 @@ export default function AssistantPage() {
         body: {},
       });
       setConversations((prev) => [res.conversation, ...prev]);
-      setActiveId(res.conversation.id);
+      selectConversation(res.conversation.id);
       setMessages([]);
     } catch (err) {
       setListError(err instanceof Error ? err.message : 'Could not start a conversation');
@@ -162,6 +177,25 @@ export default function AssistantPage() {
 
   const active = conversations.find((c) => c.id === activeId);
 
+  // Follow-up suggestions derived from last assistant citations (Slice F)
+  const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
+  const suggestionTitles = (lastAssistant?.citations ?? [])
+    .map((cit) => cit.title)
+    .filter((t): t is string => Boolean(t))
+    .slice(0, 2);
+  const suggestions = lastAssistant
+    ? [
+        ...suggestionTitles.map((t) => `What does ${t} say about next steps?`),
+        'Summarize the key points from your last answer',
+        'What actions should we take based on this?',
+      ].slice(0, 3)
+    : [];
+
+  function applySuggestion(text: string) {
+    setDraft(text);
+    inputRef.current?.focus();
+  }
+
   return (
     <div className="mx-auto flex h-[calc(100vh-7rem)] max-w-5xl flex-col gap-4 md:flex-row">
       {/* Conversation list */}
@@ -188,7 +222,7 @@ export default function AssistantPage() {
               <li key={c.id}>
                 <button
                   type="button"
-                  onClick={() => setActiveId(c.id)}
+                  onClick={() => selectConversation(c.id)}
                   className={`mb-1 w-full cursor-pointer truncate rounded-lg px-3 py-2 text-left text-sm transition-colors duration-200 ${
                     c.id === activeId
                       ? 'bg-indigo-50 text-indigo-700'
@@ -299,6 +333,20 @@ export default function AssistantPage() {
                   </div>
                 </div>
               )}
+              {suggestions.length > 0 && !sending && (
+                <div className="flex flex-wrap gap-2 pt-1" data-testid="assistant-suggestions">
+                  {suggestions.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => applySuggestion(s)}
+                      className="cursor-pointer rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs text-indigo-700 transition-colors duration-200 hover:bg-indigo-100"
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div ref={bottomRef} />
             </div>
 
@@ -309,6 +357,7 @@ export default function AssistantPage() {
               <div className="flex gap-2">
                 <input
                   id="chat-input"
+                  ref={inputRef}
                   type="text"
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}

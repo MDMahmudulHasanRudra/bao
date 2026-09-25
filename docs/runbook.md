@@ -1,17 +1,29 @@
 # Operations Runbook — Business AI OS
 
-## Stack
+## Stack (local, as of 2026-09-23)
 
 | Service  | Default local          | Notes                          |
 |----------|------------------------|--------------------------------|
-| API      | `:8080` (Hono)         | Health: `GET /health`          |
-| Web      | Next.js dev            |                                |
+| API      | `:5000` (Hono)         | Health: `GET /health` · API under `/api/v1/` |
+| Web      | `:3000` (Next.js)      | App Router; workspace under authenticated shell |
 | Worker   | BullMQ consumer        | Ingest jobs                    |
 | Postgres | `:5432` pgvector pg16  | DB `business_ai_os`, user `bao`|
 | Redis    | `:6379`                | Queues + cache                 |
 | MinIO    | `:9000` / console `:9001` | Object storage             |
 
+Demo login (dev only): `demo@businessaios.com` / `demo1234`.
+
 Start: `pnpm docker:up` · Stop: `pnpm docker:down` · Logs: `pnpm docker:logs`
+
+**Agent rule:** never run Docker commands; the user builds/restarts images.
+
+### Toolchain (pnpm currently blocked by prisma approve-builds — run directly)
+```bash
+node node_modules/typescript/bin/tsc --build
+node node_modules/vitest/vitest.mjs run
+node node_modules/eslint/bin/eslint.js "apps/**/src/**/*.{ts,tsx}" "packages/**/src/**/*.{ts,tsx}" "tests/**/*.{ts,tsx}"
+```
+Baseline after P2-3: **160/160 tests**, tsc/lint/prettier clean. Typecheck web separately: `tsc -p apps/web` from `apps/web` (root project references omit web).
 
 ## Common procedures
 
@@ -32,7 +44,7 @@ Start: `pnpm docker:up` · Stop: `pnpm docker:down` · Logs: `pnpm docker:logs`
 ```bash
 DATABASE_URL=... ./ops/backup.sh ./backups
 ```
-Postgres: `pg_dump -Fc`. MinIO: volume snapshot / `mc mirror` (see backup.sh note).
+Postgres: `pg_dump -Fc`. MinIO + Redis: volume archives (`minio_<stamp>.tgz`, `redis_<stamp>.tgz`) written automatically when Docker volumes exist; volume names overridable via `MINIO_VOLUME`/`REDIS_VOLUME`.
 
 ### Restore
 ```bash
@@ -53,5 +65,5 @@ Verified by local drill (see `docs/backup-restore-evidence.md`).
 
 ## Observability
 - Request correlation IDs in API logs (pino).
-- Audit events in `audit_events` for privileged actions.
+- Audit events in `audit_events` for privileged actions (read via `GET /api/v1/audit` — owner/admin).
 - Health endpoint for container orchestration probes.

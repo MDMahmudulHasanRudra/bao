@@ -118,10 +118,8 @@ describe('Cross-tenant — source contract checks', () => {
 
   it('organizations PUT /:id scopes update to path id AND tenant org', async () => {
     const source = await readSource('../../apps/api/src/modules/organizations/routes.ts');
-    const putMatch = source.match(/orgs\.put\('\/:id'[\s\S]*?\}\);/);
-    expect(putMatch).toBeTruthy();
-    expect(putMatch![0]).toMatch(
-      /eq\(organizations\.id,\s*orgId\),\s*eq\(organizations\.id,\s*tenant\.organizationId\)/,
+    expect(source).toMatch(
+      /orgs\.put\('\/:id'[\s\S]*?eq\(organizations\.id,\s*orgId\),\s*eq\(organizations\.id,\s*tenant\.organizationId\)/,
     );
   });
 

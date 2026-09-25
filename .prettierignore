@@ -1,0 +1,9 @@
+# Next.js regenerates this and flips it between dev/build variants
+next-env.d.ts
+
+# build output
+.next/
+dist/
+build/
+node_modules/
+coverage/

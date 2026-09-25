@@ -175,6 +175,27 @@ describe('knowledge status contract (P1-1)', () => {
     );
     expect(routes).toMatch(/status:\s*'pending'/);
   });
+
+  it('knowledge kinds: SOP tag, kind filter, expandable source details (Slice D)', () => {
+    const src = readFileSync(pagePath, 'utf-8');
+    expect(src).toMatch(/kindOf/);
+    expect(src).toMatch(/kkindfilter/);
+    expect(src).toMatch(/KIND_OPTIONS/);
+    expect(src).toMatch(/Hide details|Details/);
+    expect(src).toMatch(/source-detail/);
+    expect(src).toMatch(/aria-expanded=\{expandedId === s\.id\}/);
+    expect(src).toMatch(/toggleDetails/);
+    expect(src).toMatch(/fd\.append\('kind', fileKind\)/);
+
+    const routes = readFileSync(
+      resolve(__dirname, '../../apps/api/src/modules/knowledge/routes.ts'),
+      'utf-8',
+    );
+    expect(routes).toMatch(/normalizeKind/);
+    expect(routes).toMatch(/'sop'/);
+    expect(routes).toMatch(/->>'kind'/);
+    expect(routes).toMatch(/normalizeKind\(body\.kind\)/);
+  });
 });
 
 describe('responsive shell + route states (P1-3)', () => {
@@ -502,6 +523,24 @@ describe('proposals + presentations UI (P2-1)', () => {
     expect(src).toMatch(/audit\(c,\s*'proposal\.update'/);
     expect(src).toMatch(/status: 'approved'/);
   });
+
+  it('proposal routes snapshot versions and support restore + export', () => {
+    const src = readFileSync(propRoutes, 'utf-8');
+    expect(src).toMatch(/proposalVersions/);
+    expect(src).toMatch(/onConflictDoNothing/);
+    expect(src).toMatch(/\/versions/);
+    expect(src).toMatch(/\/restore/);
+    expect(src).toMatch(/proposal\.version\.restore/);
+    expect(src).toMatch(/contentChanged/);
+
+    const page = readFileSync(proposalsPage, 'utf-8');
+    expect(page).toMatch(/\/versions/);
+    expect(page).toMatch(/Restore/);
+    expect(page).toMatch(/History/);
+    expect(page).toMatch(/Download \.md|downloadMarkdown/);
+    expect(page).toMatch(/Export slides|exportSlides/);
+    expect(page).toMatch(/\/api\/v1\/presentations/);
+  });
 });
 
 describe('intelligence UI + scrape cycle (P2-2)', () => {
@@ -595,10 +634,222 @@ describe('analytics + dashboard insight + Diffy + settings (P2-3)', () => {
     expect(src).toMatch(/No leads yet|empty/i);
   });
 
+  it('dashboard exposes open follow-ups due within 7 days (Slice B)', () => {
+    const src = readFileSync(dashboardPage, 'utf-8');
+    expect(src).toMatch(/upcomingActivities/);
+    expect(src).toMatch(/Follow-ups/);
+    const dashRoutes = readFileSync(
+      resolve(__dirname, '../../apps/api/src/modules/dashboard/routes.ts'),
+      'utf-8',
+    );
+    expect(dashRoutes).toMatch(/upcomingActivities/);
+    expect(dashRoutes).toMatch(/isNull\(activities\.completedAt\)/);
+    expect(dashRoutes).toMatch(/lte\(activities\.dueAt, horizon\)/);
+  });
+
   it('Diffy adapter exposes mock path when unconfigured', () => {
     const src = readFileSync(diffyPath, 'utf-8');
     expect(src).toMatch(/DIFFY_API_URL/);
     expect(src).toMatch(/mock-\$\{Date\.now\(\)\}/);
     expect(src).toMatch(/not configured/i);
+  });
+
+  it('settings integrations status endpoint + page + NAV (Slice E)', () => {
+    const src = readFileSync(settingsRoutes, 'utf-8');
+    expect(src).toMatch(/settings\.get\('\/integrations'/);
+    expect(src).toMatch(/aiProviders/);
+    expect(src).toMatch(/PRESENTON_API_URL/);
+    expect(src).toMatch(/SCRAPLINK_API_URL/);
+    expect(src).toMatch(/DIFFY_API_URL/);
+    expect(src).toMatch(/STORAGE_ACCESS_KEY/);
+    const page = readFileSync(
+      resolve(__dirname, '../../apps/web/src/app/(workspace)/settings/integrations/page.tsx'),
+      'utf-8',
+    );
+    expect(page).toMatch(/settings\/integrations/);
+    expect(page).toMatch(/Connected/);
+    expect(page).toMatch(/Not configured/);
+    expect(page).toMatch(/role="alert"/);
+    const layout = readFileSync(
+      resolve(__dirname, '../../apps/web/src/app/(workspace)/layout.tsx'),
+      'utf-8',
+    );
+    expect(layout).toMatch(/\/settings\/integrations/);
+    expect(layout).toMatch(/Integrations/);
+  });
+});
+
+describe('a11y / responsive sweep (R-009)', () => {
+  const layoutPath = resolve(__dirname, '../../apps/web/src/app/(workspace)/layout.tsx');
+  const salesPage = resolve(__dirname, '../../apps/web/src/app/(workspace)/sales/page.tsx');
+  const intelPage = resolve(__dirname, '../../apps/web/src/app/(workspace)/intelligence/page.tsx');
+  const notifPage = resolve(__dirname, '../../apps/web/src/app/(workspace)/notifications/page.tsx');
+  const dashboardPage = resolve(__dirname, '../../apps/web/src/app/(workspace)/dashboard/page.tsx');
+
+  it('layout has skip link targeting main landmark', () => {
+    const src = readFileSync(layoutPath, 'utf-8');
+    expect(src).toMatch(/Skip to main content/);
+    expect(src).toMatch(/href="#main-content"/);
+    expect(src).toMatch(/id="main-content"/);
+    expect(src).toMatch(/tabIndex=\{-1\}/);
+  });
+
+  it('layout header is responsive and keeps email for screen readers on mobile', () => {
+    const src = readFileSync(layoutPath, 'utf-8');
+    expect(src).toMatch(/px-4 py-3 sm:px-6/);
+    expect(src).toMatch(/sr-only[^"]*sm:not-sr-only/);
+  });
+
+  it('sales tabs expose tabpanel + arrow-key navigation', () => {
+    const src = readFileSync(salesPage, 'utf-8');
+    expect(src).toMatch(/role="tabpanel"/);
+    expect(src).toMatch(/aria-labelledby=\{`sales-tab-\$\{tab\}`\}/);
+    expect(src).toMatch(/aria-controls=\{`sales-panel-\$\{id\}`\}/);
+    expect(src).toMatch(/ArrowLeft/);
+    expect(src).toMatch(/ArrowRight/);
+  });
+
+  it('intelligence tabs expose labelled tablist, tabpanel, arrow keys', () => {
+    const src = readFileSync(intelPage, 'utf-8');
+    expect(src).toMatch(/aria-label="Monitoring sections"/);
+    expect(src).toMatch(/id="intel-panel-targets"/);
+    expect(src).toMatch(/id="intel-panel-events"/);
+    expect(src).toMatch(/ArrowLeft/);
+  });
+
+  it('unread notification is announced as text, not color alone', () => {
+    const src = readFileSync(notifPage, 'utf-8');
+    expect(src).toMatch(/sr-only">Unread</);
+    expect(src).toMatch(/aria-hidden/);
+  });
+
+  it('light-surface pages avoid failing slate-400 body text (contrast)', () => {
+    const src = readFileSync(dashboardPage, 'utf-8');
+    expect(src).not.toMatch(/text-slate-400/);
+    const intel = readFileSync(intelPage, 'utf-8');
+    expect(intel).not.toMatch(/text-slate-400/);
+  });
+});
+
+describe('billing UI + API (Slice: Billing)', () => {
+  const billingPage = resolve(
+    __dirname,
+    '../../apps/web/src/app/(workspace)/settings/billing/page.tsx',
+  );
+  const billingRoutes = resolve(__dirname, '../../apps/api/src/modules/billing/routes.ts');
+
+  it('page has plans, subscription, invoices, payment methods with empty/loading/error states', () => {
+    const src = readFileSync(billingPage, 'utf-8');
+    expect(src).toMatch(/\/api\/v1\/billing\/plans/);
+    expect(src).toMatch(/\/api\/v1\/billing\/subscription/);
+    expect(src).toMatch(/\/api\/v1\/billing\/invoices/);
+    expect(src).toMatch(/\/api\/v1\/billing\/payment-methods/);
+    expect(src).toMatch(/Loading billing/);
+    expect(src).toMatch(/role="alert"/);
+    expect(src).toMatch(/Retry/);
+    expect(src).toMatch(/No active subscription/);
+    expect(src).toMatch(/No plans configured/);
+    expect(src).toMatch(/No invoices yet/);
+    expect(src).toMatch(/Subscribe/);
+    expect(src).toMatch(/Change Plan/);
+    expect(src).toMatch(/Cancel/);
+    expect(src).toMatch(/Add Payment Method/);
+    expect(src).toMatch(/statusBadge/);
+    expect(src).toMatch(/formatPrice/);
+  });
+
+  it('routes expose plans CRUD, subscription, invoices, payment methods, webhook', () => {
+    const src = readFileSync(billingRoutes, 'utf-8');
+    expect(src).toMatch(/billingPlans/);
+    expect(src).toMatch(/billingSubscriptions/);
+    expect(src).toMatch(/billingInvoices/);
+    expect(src).toMatch(/billingPaymentMethods/);
+    expect(src).toMatch(/billingUsageRecords/);
+    expect(src).toMatch(/\/plans/);
+    expect(src).toMatch(/\/subscription/);
+    expect(src).toMatch(/\/invoices/);
+    expect(src).toMatch(/\/payment-methods/);
+    expect(src).toMatch(/\/usage/);
+    expect(src).toMatch(/\/webhooks\/stripe/);
+    expect(src).toMatch(/requirePermission\('billing\.manage'\)/);
+    expect(src).toMatch(/audit\(c,\s*'billing\.plan\.create'/);
+    expect(src).toMatch(/audit\(c,\s*'billing\.subscription\.create'/);
+    expect(src).toMatch(/audit\(c,\s*'billing\.payment_method\.create'/);
+  });
+
+  it('plan schema validates required fields', () => {
+    const src = readFileSync(billingRoutes, 'utf-8');
+    expect(src).toMatch(/planSchema.*z\.object/);
+    expect(src).toMatch(/name.*z\.string.*min.*1/);
+    expect(src).toMatch(/priceCents.*z\.number.*int.*min.*0/);
+    expect(src).toMatch(/interval.*z\.enum.*month.*year.*week.*day/);
+  });
+
+  it('shell navigates to /settings/billing', () => {
+    const layout = readFileSync(
+      resolve(__dirname, '../../apps/web/src/app/(workspace)/layout.tsx'),
+      'utf-8',
+    );
+    expect(layout).toMatch(/\/settings\/billing/);
+    expect(layout).toMatch(/Billing/);
+  });
+});
+
+describe('automation UI + API (Slice: Automation)', () => {
+  const automationPage = resolve(
+    __dirname,
+    '../../apps/web/src/app/(workspace)/automation/page.tsx',
+  );
+  const automationRoutes = resolve(__dirname, '../../apps/api/src/modules/automation/routes.ts');
+
+  it('page has workflows list, create/edit modal, run history, empty/loading/error states', () => {
+    const src = readFileSync(automationPage, 'utf-8');
+    expect(src).toMatch(/\/api\/v1\/automation\/workflows/);
+    expect(src).toMatch(/Loading automations/);
+    expect(src).toMatch(/role="alert"/);
+    expect(src).toMatch(/Retry/);
+    expect(src).toMatch(/No automations yet/);
+    expect(src).toMatch(/Create Workflow/);
+    expect(src).toMatch(/Create Workflow/);
+    expect(src).toMatch(/triggerType/);
+    expect(src).toMatch(/lead_created|stage_changed|activity_due|schedule|webhook/);
+    expect(src).toMatch(/statusBadge/);
+    expect(src).toMatch(/triggerBadge/);
+    expect(src).toMatch(/View Runs/);
+    expect(src).toMatch(/Run/);
+    expect(src).toMatch(/Edit/);
+    expect(src).toMatch(/Delete/);
+    expect(src).toMatch(/confirm\(/);
+  });
+
+  it('routes expose workflows CRUD, runs, retry, trigger types', () => {
+    const src = readFileSync(automationRoutes, 'utf-8');
+    expect(src).toMatch(/automationWorkflows/);
+    expect(src).toMatch(/automationRuns/);
+    expect(src).toMatch(/\/workflows/);
+    expect(src).toMatch(/\/workflows\/:id/);
+    expect(src).toMatch(/\/workflows\/:id\/run/);
+    expect(src).toMatch(/\/workflows\/:id\/runs/);
+    expect(src).toMatch(/\/runs\/:id/);
+    expect(src).toMatch(/\/runs\/:id\/retry/);
+    expect(src).toMatch(/triggerSchema.*z\.object/);
+    expect(src).toMatch(
+      /type.*z\.enum.*lead_created.*stage_changed.*activity_due.*schedule.*webhook/,
+    );
+    expect(src).toMatch(/workflowSchema.*z\.object/);
+    expect(src).toMatch(/requirePermission\('automation\.manage'\)/);
+    expect(src).toMatch(/audit\(c,\s*'automation\.workflow\.create'/);
+    expect(src).toMatch(/audit\(c,\s*'automation\.workflow\.run'/);
+    expect(src).toMatch(/audit\(c,\s*'automation\.run\.retry'/);
+  });
+
+  it('shell navigates to /automation', () => {
+    const layout = readFileSync(
+      resolve(__dirname, '../../apps/web/src/app/(workspace)/layout.tsx'),
+      'utf-8',
+    );
+    expect(layout).toMatch(/\/automation/);
+    expect(layout).toMatch(/Automation/);
+    expect(layout).toMatch(/automation.*moduleId.*automation/);
   });
 });

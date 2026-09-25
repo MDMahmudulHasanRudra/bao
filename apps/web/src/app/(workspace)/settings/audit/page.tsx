@@ -174,7 +174,7 @@ export default function AuditPage() {
                         {detailsText}
                       </p>
                     )}
-                    <p className="mt-1 text-xs text-slate-400">
+                    <p className="mt-1 text-xs text-slate-500">
                       {e.ipAddress ? `IP ${e.ipAddress} · ` : ''}
                       {e.actorId ? `Actor ${e.actorId.slice(0, 8)} · ` : ''}
                       <time dateTime={e.createdAt}>{new Date(e.createdAt).toLocaleString()}</time>

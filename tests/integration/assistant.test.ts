@@ -341,4 +341,17 @@ describe('Assistant UI failure/empty path contract (P1-2)', () => {
     expect(src).toMatch(/Sending…/);
     expect(src).toMatch(/disabled=\{sending \|\| !draft\.trim\(\)\}/);
   });
+
+  it('Slice F: ?c= URL sync and follow-up suggestion chips', () => {
+    const src = readFileSync(pagePath, 'utf-8');
+    expect(src).toMatch(/window\.location\.search/);
+    expect(src).toMatch(/URLSearchParams/);
+    expect(src).toMatch(/\?c=/);
+    expect(src).toMatch(/history\.replaceState/);
+    expect(src).toMatch(/data-testid="assistant-suggestions"/);
+    expect(src).toMatch(/applySuggestion/);
+    expect(src).toMatch(/suggestions/);
+    expect(src).toMatch(/lastAssistant/);
+    expect(src).toMatch(/citations/);
+  });
 });

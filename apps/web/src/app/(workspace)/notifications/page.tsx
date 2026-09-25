@@ -185,15 +185,18 @@ export default function NotificationsPage() {
                         {n.type}
                       </span>
                       {unread && (
-                        <span
-                          className="h-2 w-2 shrink-0 rounded-full bg-indigo-500"
-                          aria-label="Unread"
-                        />
+                        <>
+                          <span className="sr-only">Unread</span>
+                          <span
+                            aria-hidden
+                            className="h-2 w-2 shrink-0 rounded-full bg-indigo-500"
+                          />
+                        </>
                       )}
                     </div>
                     <p className="mt-1 text-sm font-medium text-slate-900">{n.title}</p>
                     {n.body && <p className="mt-0.5 text-sm text-slate-600">{n.body}</p>}
-                    <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-slate-400">
+                    <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-slate-500">
                       <time dateTime={n.createdAt}>{new Date(n.createdAt).toLocaleString()}</time>
                       {n.link && (
                         <Link

@@ -1,20 +1,22 @@
 # Functional Delivery Execution Plan
 
+**Status 2026-09-23:** Ordered slices 1–9 delivered via backlog P0-1…P2-3 (see `reality-audit-and-delivery-backlog.md` §5 and blueprint `state/CURRENT_STATUS.md`). Remaining optional: R-001…R-009 hardening and production-release evidence (slice 10 / checklist).
+
 ## Delivery principle
 
 Build the complete planned product through **small vertical slices**. A slice includes backend/domain/API/worker work plus the corresponding real UI workflow, validation, authorization, loading/empty/error states, tests, and handoff. UI is improved continuously; it is not deferred until every backend feature exists. Do not start a broad visual redesign while a flow is non-functional.
 
 ## Ordered delivery slices
 
-1. Foundation: auth/session, workspace selection, RBAC, tenant isolation, module registry, dashboard data contract.
-2. AI Settings: provider connection, encrypted credentials, model discovery/catalogue, capability defaults, audit trail.
-3. Knowledge Hub: upload/URL intake, processing status, source permissions, search, useful empty/onboarding UI.
-4. AI Assistant: real configured provider/model resolution, permission-aware RAG, cited answers, safe failure UX.
-5. Sales: company/contact/lead/pipeline/activity lifecycle, dashboard metrics, follow-up insight rules.
-6. Proposals + Presentations: versioned drafts/approval and Presenton adapter workflow.
-7. Intelligence: monitored targets, ScrapLink workflow, reviewed events and business insight cards.
-8. Notifications + analytics: real event-driven notifications and scoped metrics.
-9. Diffy integration, settings completion, end-to-end hardening and production release evidence.
+1. Foundation: auth/session, workspace selection, RBAC, tenant isolation, module registry, dashboard data contract. ✅
+2. AI Settings: provider connection, encrypted credentials, model discovery/catalogue, capability defaults, audit trail. ✅ (P0-1)
+3. Knowledge Hub: upload/URL intake, processing status, source permissions, search, useful empty/onboarding UI. ✅ (P1-1)
+4. AI Assistant: real configured provider/model resolution, permission-aware RAG, cited answers, safe failure UX. ✅ (P1-2)
+5. Sales: company/contact/lead/pipeline/activity lifecycle, dashboard metrics, follow-up insight rules. ✅ (P1-4)
+6. Proposals + Presentations: versioned drafts/approval and Presenton adapter workflow. ✅ (P2-1)
+7. Intelligence: monitored targets, ScrapLink workflow, reviewed events and business insight cards. ✅ (P2-2)
+8. Notifications + analytics: real event-driven notifications and scoped metrics. ✅ (P1-5, P2-3)
+9. Diffy integration, settings completion, end-to-end hardening and production release evidence. ✅ Diffy compare + settings C4 (P2-3); hardening/production evidence = R-001…R-009 still open.
 
 ## For every slice
 
@@ -26,4 +28,4 @@ Build the complete planned product through **small vertical slices**. A slice in
 
 ## Dashboard definition
 
-The dashboard becomes useful from the first empty workspace: onboarding checklist, contextual empty state, safe Ask Business AI entry point, quick actions, and truthful module availability. As sources arrive, it adds only evidence-backed insight cards with a source/data condition, organization/permission rule, freshness rule, action, and empty/error behavior.
+The dashboard becomes useful from the first empty workspace: onboarding checklist, contextual empty state, safe Ask Business AI entry point, quick actions, and truthful module availability. As sources arrive, it adds only evidence-backed insight cards with a source/data condition, organization/permission rule, freshness rule, action, and empty/error behavior. ✅ Implemented (Ask Business AI CTA + Source/freshness/empty on cards — P2-3).

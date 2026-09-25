@@ -219,6 +219,24 @@ Order respects `functional-delivery-execution-plan.md`. Every slice ships backen
 
 No client-side provider calls with user keys, no credential export, no billing, no live model-list promise for every provider (catalogue fallback allowed), no autonomous AI actions, no broad visual redesign before flow verification.
 
-## 5. Next bounded task
+## 5. Delivery status (updated 2026-09-23)
 
-**Implement P0-1 — AI Provider and Model Settings** exactly per `ai-provider-and-model-settings-spec.md`: schema+migration, `secret-box`, permission entry, adapter registry, `/ai-settings` routes with audit, org-policy resolution in assistant/retrieval, Settings → AI Providers UI with full state matrix, and the listed unit/permission/tenant/provider-failure/no-leak tests — one vertical slice, then re-run toolchain and update `CURRENT_STATUS.md`.
+**All slices above are complete** (code + tests + live after user Docker rebuild). Evidence in `business-ai-os-blueprint/state/CURRENT_STATUS.md` (newest handoff first).
+
+| Slice | Status | Evidence (summary) |
+|-------|--------|--------------------|
+| P0-1 AI provider/model settings | ✅ Done | `ai_providers`, secret-box, `/ai-settings`, Settings UI, permission matrix entry |
+| P0-2 Foundation reconciliation | ✅ Done | registry truth, nav from `/modules`, `requirePermission`, intelligence role gates |
+| P1-1 Knowledge Hub UI | ✅ Done | real knowledge page + ingest status |
+| P1-2 AI Assistant UI | ✅ Done | assistant page, org-policy resolution, cited answers |
+| P1-3 Responsive shell + route states | ✅ Done | layout, loading/error, active nav |
+| P1-4 Sales workspace UI | ✅ Done | companies/contacts/leads/pipeline |
+| P1-5 Notification producers + inbox | ✅ Done | emitters + notifications page |
+| P1-6 Audit visibility + AI run events | ✅ Done | `GET /audit`, assistant/provider events |
+| P2-1 Proposals + Presentations UI | ✅ Done | versioned approve flow, Presenton fail-loud |
+| P2-2 Intelligence UI | ✅ Done | targets/events, scrape mock, insight cards |
+| P2-3 Analytics + dashboard insight | ✅ Done | analytics page, Diffy compare audited, Ask Business AI, settings C4 strict schema |
+
+**Regression at close of P2-3:** typecheck 0 (root + web) · lint 0 · prettier 0 · **160/160 tests** · live API+web verified post-rebuild.
+
+**Next bounded task:** none pending from this backlog. Await user instruction — optional work: harden R-001…R-009 (`docs/risk-register.md`), new feature slice, or stop. Do not rebuild the whole product in one request.

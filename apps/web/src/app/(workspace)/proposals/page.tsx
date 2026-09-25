@@ -17,8 +17,17 @@ type Proposal = {
   status: string;
   version?: number | null;
   templateId?: string | null;
+  exportedUrl?: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+type ProposalVersion = {
+  id: string;
+  version: number;
+  title: string;
+  content?: string | null;
+  createdAt: string;
 };
 
 function errMsg(e: unknown) {
@@ -45,6 +54,8 @@ export default function ProposalsPage() {
   const [tplName, setTplName] = useState('');
   const [tplContent, setTplContent] = useState('');
   const [editContent, setEditContent] = useState('');
+  const [versions, setVersions] = useState<ProposalVersion[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
 
   const selected = proposals.find((p) => p.id === selectedId) || null;
 
@@ -71,6 +82,20 @@ export default function ProposalsPage() {
 
   useEffect(() => {
     setEditContent(selected?.content || '');
+    setShowHistory(false);
+    setVersions([]);
+    if (!selectedId) return;
+    let cancelled = false;
+    void api<{ versions: ProposalVersion[] }>(`/api/v1/proposals/${selectedId}/versions`)
+      .then((r) => {
+        if (!cancelled) setVersions(r.versions || []);
+      })
+      .catch(() => {
+        if (!cancelled) setVersions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [selectedId, selected?.content]);
 
   function flashMsg(message: string, isError = false) {
@@ -136,6 +161,63 @@ export default function ProposalsPage() {
       });
       setProposals((prev) => prev.map((p) => (p.id === res.proposal.id ? res.proposal : p)));
       flashMsg(`Saved as version ${res.proposal.version || 1}.`);
+    } catch (err) {
+      flashMsg(errMsg(err), true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function restoreVersion(v: number) {
+    if (!selected) return;
+    if (!window.confirm(`Restore version ${v}? This creates a new version.`)) return;
+    setBusy(true);
+    setFlash(null);
+    try {
+      const res = await api<{ proposal: Proposal }>(
+        `/api/v1/proposals/${selected.id}/versions/${v}/restore`,
+        { method: 'POST' },
+      );
+      setProposals((prev) => prev.map((p) => (p.id === res.proposal.id ? res.proposal : p)));
+      const hist = await api<{ versions: ProposalVersion[] }>(
+        `/api/v1/proposals/${selected.id}/versions`,
+      );
+      setVersions(hist.versions || []);
+      flashMsg(`Restored v${v} as v${res.proposal.version}.`);
+    } catch (err) {
+      flashMsg(errMsg(err), true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function downloadMarkdown() {
+    if (!selected) return;
+    const md = `# ${selected.title}\n\n${selected.content || ''}\n`;
+    const blob = new Blob([md], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${selected.title.replace(/[^\w-]+/g, '-').toLowerCase() || 'proposal'}-v${selected.version || 1}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+    flashMsg('Downloaded Markdown export.');
+  }
+
+  async function exportSlides() {
+    if (!selected) return;
+    setBusy(true);
+    setFlash(null);
+    try {
+      await api('/api/v1/presentations', {
+        method: 'POST',
+        body: {
+          title: selected.title,
+          proposalId: selected.id,
+          content: selected.content || '',
+        },
+      });
+      flashMsg('Slide export started — track it on the Presentations page.');
     } catch (err) {
       flashMsg(errMsg(err), true);
     } finally {
@@ -367,7 +449,7 @@ export default function ProposalsPage() {
                           </span>
                         </div>
                         <p className="mt-1 text-sm font-medium text-slate-900">{p.title}</p>
-                        <p className="mt-0.5 text-xs text-slate-400">
+                        <p className="mt-0.5 text-xs text-slate-500">
                           Updated {new Date(p.updatedAt).toLocaleString()}
                         </p>
                       </button>
@@ -397,14 +479,77 @@ export default function ProposalsPage() {
                           rows={8}
                           className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                         />
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => void saveContent()}
-                          className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-                        >
-                          {busy ? 'Saving…' : `Save (→ v${(p.version || 1) + 1})`}
-                        </button>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void saveContent()}
+                            className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                          >
+                            {busy ? 'Saving…' : `Save (→ v${(p.version || 1) + 1})`}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => setShowHistory((s) => !s)}
+                            aria-expanded={showHistory}
+                            className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                          >
+                            {showHistory ? 'Hide history' : `History (${versions.length})`}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={downloadMarkdown}
+                            className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                          >
+                            Download .md
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void exportSlides()}
+                            className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                          >
+                            Export slides
+                          </button>
+                        </div>
+                        {showHistory && (
+                          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                            <h3 className="text-xs font-semibold text-slate-700">
+                              Version history
+                            </h3>
+                            {versions.length === 0 ? (
+                              <p className="mt-1 text-xs text-slate-500">No saved versions yet.</p>
+                            ) : (
+                              <ul className="mt-2 space-y-1.5">
+                                {versions.map((v) => (
+                                  <li
+                                    key={v.id}
+                                    className="flex flex-wrap items-center justify-between gap-2 text-xs"
+                                  >
+                                    <span className="text-slate-700">
+                                      v{v.version}
+                                      <span className="ml-2 text-slate-500">
+                                        {new Date(v.createdAt).toLocaleString()}
+                                      </span>
+                                    </span>
+                                    {v.version !== (p.version || 1) && (
+                                      <button
+                                        type="button"
+                                        disabled={busy}
+                                        onClick={() => void restoreVersion(v.version)}
+                                        className="rounded border border-slate-200 bg-white px-2 py-0.5 text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+                                      >
+                                        Restore
+                                      </button>
+                                    )}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
                   </li>

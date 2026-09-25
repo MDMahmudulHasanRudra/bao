@@ -11,9 +11,11 @@ type Source = {
   mimeType: string | null;
   fileSize: number | null;
   status: string;
+  visibility?: string;
   chunkCount: number | null;
-  metadata?: { error?: string } | null;
+  metadata?: { error?: string; kind?: string } | null;
   createdAt: string;
+  updatedAt?: string;
 };
 
 type SearchHit = {
@@ -38,21 +40,37 @@ function formatBytes(n: number | null): string {
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
+const KIND_OPTIONS = [
+  { value: 'document', label: 'Document' },
+  { value: 'sop', label: 'SOP' },
+  { value: 'reference', label: 'Reference' },
+] as const;
+
+function kindOf(s: Source): string {
+  return typeof s.metadata?.kind === 'string' ? s.metadata.kind : 'document';
+}
+
 export default function KnowledgePage() {
   const [sources, setSources] = useState<Source[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('');
+  const [kindFilter, setKindFilter] = useState('');
+  const [expandedId, setExpandedId] = useState('');
+  const [detail, setDetail] = useState<Source | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   // Upload / URL intake
   const [file, setFile] = useState<File | null>(null);
   const [fileTitle, setFileTitle] = useState('');
+  const [fileKind, setFileKind] = useState('document');
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [url, setUrl] = useState('');
   const [urlTitle, setUrlTitle] = useState('');
+  const [urlKind, setUrlKind] = useState('document');
   const [addingUrl, setAddingUrl] = useState(false);
   const [urlMsg, setUrlMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -104,6 +122,7 @@ export default function KnowledgePage() {
       const fd = new FormData();
       fd.append('file', file);
       if (fileTitle.trim()) fd.append('title', fileTitle.trim());
+      fd.append('kind', fileKind);
       const res = await api<{ source: Source }>('/api/v1/knowledge/upload', {
         method: 'POST',
         body: fd,
@@ -127,7 +146,7 @@ export default function KnowledgePage() {
     try {
       const res = await api<{ source: Source }>('/api/v1/knowledge/url', {
         method: 'POST',
-        body: { url, title: urlTitle.trim() || undefined },
+        body: { url, title: urlTitle.trim() || undefined, kind: urlKind },
       });
       setUrlMsg({ ok: true, text: `“${res.source.title}” queued for processing.` });
       setUrl('');
@@ -194,9 +213,30 @@ export default function KnowledgePage() {
     }
   }
 
-  const visible = sources.filter((s) =>
-    filter ? s.title.toLowerCase().includes(filter.toLowerCase()) : true,
-  );
+  async function toggleDetails(s: Source) {
+    if (expandedId === s.id) {
+      setExpandedId('');
+      setDetail(null);
+      return;
+    }
+    setExpandedId(s.id);
+    setDetail(s);
+    setDetailLoading(true);
+    try {
+      const res = await api<{ source: Source }>(`/api/v1/knowledge/${s.id}`);
+      setDetail(res.source);
+    } catch {
+      setDetail(s);
+    } finally {
+      setDetailLoading(false);
+    }
+  }
+
+  const visible = sources.filter((s) => {
+    if (filter && !s.title.toLowerCase().includes(filter.toLowerCase())) return false;
+    if (kindFilter && kindOf(s) !== kindFilter) return false;
+    return true;
+  });
 
   if (loading) {
     return <p className="text-sm text-slate-500">Loading knowledge sources…</p>;
@@ -256,18 +296,37 @@ export default function KnowledgePage() {
                 className="mt-1 block w-full cursor-pointer rounded-lg border border-slate-300 bg-white text-sm text-slate-700 file:mr-3 file:cursor-pointer file:rounded-l-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-xs file:font-medium file:text-slate-700 hover:file:bg-slate-200"
               />
             </div>
-            <div>
-              <label htmlFor="ktitle" className="block text-xs font-medium text-slate-700">
-                Title (optional)
-              </label>
-              <input
-                id="ktitle"
-                type="text"
-                value={fileTitle}
-                onChange={(e) => setFileTitle(e.target.value)}
-                placeholder={file?.name || 'Document title'}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-              />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label htmlFor="ktitle" className="block text-xs font-medium text-slate-700">
+                  Title (optional)
+                </label>
+                <input
+                  id="ktitle"
+                  type="text"
+                  value={fileTitle}
+                  onChange={(e) => setFileTitle(e.target.value)}
+                  placeholder={file?.name || 'Document title'}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+              <div>
+                <label htmlFor="kkind" className="block text-xs font-medium text-slate-700">
+                  Kind
+                </label>
+                <select
+                  id="kkind"
+                  value={fileKind}
+                  onChange={(e) => setFileKind(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                >
+                  {KIND_OPTIONS.map((k) => (
+                    <option key={k.value} value={k.value}>
+                      {k.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
             {uploadMsg && (
               <p
@@ -312,18 +371,37 @@ export default function KnowledgePage() {
                 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
               />
             </div>
-            <div>
-              <label htmlFor="kurltitle" className="block text-xs font-medium text-slate-700">
-                Title (optional)
-              </label>
-              <input
-                id="kurltitle"
-                type="text"
-                value={urlTitle}
-                onChange={(e) => setUrlTitle(e.target.value)}
-                placeholder="Page title"
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-              />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label htmlFor="kurltitle" className="block text-xs font-medium text-slate-700">
+                  Title (optional)
+                </label>
+                <input
+                  id="kurltitle"
+                  type="text"
+                  value={urlTitle}
+                  onChange={(e) => setUrlTitle(e.target.value)}
+                  placeholder="Page title"
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+              <div>
+                <label htmlFor="kurlkind" className="block text-xs font-medium text-slate-700">
+                  Kind
+                </label>
+                <select
+                  id="kurlkind"
+                  value={urlKind}
+                  onChange={(e) => setUrlKind(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                >
+                  {KIND_OPTIONS.map((k) => (
+                    <option key={k.value} value={k.value}>
+                      {k.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
             {urlMsg && (
               <p
@@ -402,7 +480,23 @@ export default function KnowledgePage() {
           <h2 id="sources-heading" className="text-sm font-semibold text-slate-900">
             Sources
           </h2>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <label htmlFor="kkindfilter" className="sr-only">
+              Filter by kind
+            </label>
+            <select
+              id="kkindfilter"
+              value={kindFilter}
+              onChange={(e) => setKindFilter(e.target.value)}
+              className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            >
+              <option value="">All kinds</option>
+              {KIND_OPTIONS.map((k) => (
+                <option key={k.value} value={k.value}>
+                  {k.label}
+                </option>
+              ))}
+            </select>
             <label htmlFor="kfilter" className="sr-only">
               Filter by title
             </label>
@@ -468,6 +562,9 @@ export default function KnowledgePage() {
                       <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium uppercase text-slate-500">
                         {s.type}
                       </span>
+                      <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium uppercase text-indigo-700">
+                        {kindOf(s) === 'sop' ? 'SOP' : kindOf(s)}
+                      </span>
                     </div>
                     <p className="mt-1 text-xs text-slate-500">
                       {s.status === 'ready' && s.chunkCount != null
@@ -499,8 +596,77 @@ export default function KnowledgePage() {
                         {rowMsg.text}
                       </p>
                     )}
+                    {expandedId === s.id && (
+                      <div
+                        id={`source-detail-${s.id}`}
+                        className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700"
+                        data-testid="source-detail"
+                      >
+                        {detailLoading ? (
+                          <p className="text-slate-500">Loading details…</p>
+                        ) : (
+                          <dl className="grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2">
+                            <div>
+                              <dt className="font-medium text-slate-600">ID</dt>
+                              <dd className="font-mono break-all">{detail?.id ?? s.id}</dd>
+                            </div>
+                            <div>
+                              <dt className="font-medium text-slate-600">Kind</dt>
+                              <dd>{kindOf(detail ?? s)}</dd>
+                            </div>
+                            <div>
+                              <dt className="font-medium text-slate-600">Visibility</dt>
+                              <dd>{detail?.visibility ?? '—'}</dd>
+                            </div>
+                            <div>
+                              <dt className="font-medium text-slate-600">MIME</dt>
+                              <dd>{detail?.mimeType ?? '—'}</dd>
+                            </div>
+                            <div>
+                              <dt className="font-medium text-slate-600">Size</dt>
+                              <dd>
+                                {detail?.fileSize != null ? formatBytes(detail.fileSize) : '—'}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="font-medium text-slate-600">Chunks</dt>
+                              <dd>{detail?.chunkCount ?? 0}</dd>
+                            </div>
+                            <div>
+                              <dt className="font-medium text-slate-600">Status</dt>
+                              <dd>{detail?.status ?? s.status}</dd>
+                            </div>
+                            <div>
+                              <dt className="font-medium text-slate-600">Created</dt>
+                              <dd>{new Date(detail?.createdAt ?? s.createdAt).toLocaleString()}</dd>
+                            </div>
+                            {detail?.url && (
+                              <div className="sm:col-span-2">
+                                <dt className="font-medium text-slate-600">URL</dt>
+                                <dd className="break-all">{detail.url}</dd>
+                              </div>
+                            )}
+                            {detail?.metadata?.error && (
+                              <div className="sm:col-span-2">
+                                <dt className="font-medium text-slate-600">Error</dt>
+                                <dd className="text-rose-600">{detail.metadata.error}</dd>
+                              </div>
+                            )}
+                          </dl>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="flex shrink-0 flex-wrap gap-2">
+                    <button
+                      type="button"
+                      aria-expanded={expandedId === s.id}
+                      aria-controls={`source-detail-${s.id}`}
+                      onClick={() => void toggleDetails(s)}
+                      className="cursor-pointer rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors duration-200 hover:bg-slate-50"
+                    >
+                      {expandedId === s.id ? 'Hide details' : 'Details'}
+                    </button>
                     {s.type === 'file' && (
                       <button
                         type="button"

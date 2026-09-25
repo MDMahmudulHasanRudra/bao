@@ -262,7 +262,7 @@ export default function OrganizationSettingsPage() {
           >
             {busy ? 'Saving…' : 'Save settings'}
           </button>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-500">
             Owner/admin only · last saved keys: {Object.keys(settings).join(', ') || 'none'}
           </p>
         </div>

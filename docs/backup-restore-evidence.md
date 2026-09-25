@@ -49,6 +49,6 @@ docker exec bao-drill-pg pg_restore -U bao -d business_ai_os --no-owner --no-pri
 
 ## Gaps / follow-ups
 
-- MinIO object backup not automated (volume snapshot / `mc mirror`) — tracked as R-007.
-- Redis durability depends on AOF/RDB policy — document before prod.
+- MinIO/Redis: **automation added 2026-09-24** — `ops/backup.sh` now archives `minio_data`/`redis_data` volumes (`tar` via alpine, graceful skip if absent). **Restore drill for those archives still pending a user-run Docker session** (R-007).
+- Redis durability: default image has no AOF; volume snapshot only captures last RDB — acceptable for cache/queue; document policy before prod.
 - Host (non-Docker) restore path in `ops/restore.sh` still requires `pg_restore` on PATH.

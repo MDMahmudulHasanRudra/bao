@@ -51,7 +51,7 @@ function Card({
     <div className="rounded-xl border border-slate-200 bg-white p-4">
       <p className="text-xs font-medium text-slate-500">{label}</p>
       <p className="mt-2 text-3xl font-semibold text-slate-900">{isEmpty ? '—' : value}</p>
-      <p className="mt-1 text-xs text-slate-400">
+      <p className="mt-1 text-xs text-slate-500">
         {isEmpty && emptyText ? emptyText : `Source: ${source}`}
       </p>
     </div>
@@ -327,7 +327,7 @@ export default function AnalyticsPage() {
                   Mock
                 </span>
               )}
-              <span className="text-slate-400">job {comparison.jobId}</span>
+              <span className="text-slate-500">job {comparison.jobId}</span>
             </div>
             {comparison.summary && (
               <p className="mt-2 text-sm text-slate-700">{comparison.summary}</p>
@@ -341,7 +341,7 @@ export default function AnalyticsPage() {
                 ))}
               </ul>
             )}
-            <p className="mt-2 text-[11px] text-slate-400">
+            <p className="mt-2 text-[11px] text-slate-500">
               Source: diffy.compare audit · {comparison.mock ? 'Diffy not configured' : 'Diffy API'}
             </p>
           </div>

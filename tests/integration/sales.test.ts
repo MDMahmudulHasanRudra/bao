@@ -32,7 +32,7 @@ import { errorHandler } from '../../apps/api/src/core/errors/handler.js';
 import { authMiddleware, signToken } from '../../apps/api/src/core/auth/jwt.js';
 import { tenantMiddleware } from '../../apps/api/src/core/tenancy/context.js';
 import sales from '../../apps/api/src/modules/sales/routes.js';
-import { leads, memberships } from '../../apps/api/src/db/schema.js';
+import { leads, memberships, activities } from '../../apps/api/src/db/schema.js';
 
 type LeadRow = {
   id: string;
@@ -162,5 +162,91 @@ describe('sales stage transitions (P1-4 e2e extension)', () => {
     );
     expect(src).toMatch(/eq\(leads\.organizationId, tenant\.organizationId\)/);
     expect(src).toMatch(/ownerId: tenant\.userId/);
+  });
+});
+
+describe('activity follow-ups (dueAt + complete)', () => {
+  type ActivityRow = {
+    id: string;
+    organizationId: string;
+    subject: string;
+    dueAt: Date | null;
+    completedAt: Date | null;
+  };
+
+  const baseActivity: ActivityRow = {
+    id: 'a1',
+    organizationId: 'org-a',
+    subject: 'Call Acme',
+    dueAt: new Date('2026-09-25T10:00:00Z'),
+    completedAt: null,
+  };
+
+  function mockActivityDb(row: ActivityRow | null) {
+    const audits: unknown[] = [];
+    vi.mocked(getDb).mockReturnValue({
+      select: () => ({
+        from: (table: object) => ({
+          where: () => {
+            if (table === memberships) {
+              return resolved([{ userId: 'u1', organizationId: 'org-a', role: 'member' }]);
+            }
+            if (table === activities) return resolved(row ? [row] : []);
+            return resolved([]);
+          },
+        }),
+      }),
+      update: (table: object) => ({
+        set: (patch: Record<string, unknown>) => ({
+          where: () => {
+            if (table === activities && row) return resolved([{ ...row, ...patch }]);
+            return resolved([]);
+          },
+        }),
+      }),
+      insert: () => ({
+        values: (r: unknown) => {
+          audits.push(r);
+          return resolved([r]);
+        },
+      }),
+    } as never);
+    return audits;
+  }
+
+  it('PATCH marks an activity complete and audits', async () => {
+    const audits = mockActivityDb({ ...baseActivity });
+    const app = buildApp();
+    const res = await app.request('/sales/activities/a1', {
+      method: 'PATCH',
+      headers: authHeaders(),
+      body: JSON.stringify({ completed: true }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.activity.completedAt).toBeTruthy();
+    expect(new Date(body.activity.completedAt).getTime()).toBeGreaterThan(0);
+    expect(audits.length).toBeGreaterThan(0);
+  });
+
+  it('PATCH 404 for activity outside the org', async () => {
+    mockActivityDb(null);
+    const app = buildApp();
+    const res = await app.request('/sales/activities/other', {
+      method: 'PATCH',
+      headers: authHeaders(),
+      body: JSON.stringify({ completed: true }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it('PATCH accepts dueAt updates (source contract)', () => {
+    const src = readFileSync(
+      resolve(__dirname, '../../apps/api/src/modules/sales/routes.ts'),
+      'utf-8',
+    );
+    expect(src).toMatch(/sales\.patch\('\/activities\/:id'/);
+    expect(src).toMatch(/eq\(activities\.organizationId, tenant\.organizationId\)/);
+    expect(src).toMatch(/body\.dueAt \? new Date\(body\.dueAt\) : null/);
   });
 });

@@ -372,6 +372,36 @@ sales.post('/activities', async (c) => {
   return c.json({ activity }, 201);
 });
 
+sales.patch('/activities/:id', async (c) => {
+  const tenant = getTenant(c);
+  const db = getDb();
+  const id = c.req.param('id');
+  const body = await c.req.json<{ completed?: boolean; dueAt?: string | null }>();
+
+  const [existing] = await db
+    .select()
+    .from(activities)
+    .where(and(eq(activities.id, id), eq(activities.organizationId, tenant.organizationId)));
+  if (!existing) throw new NotFoundError('Activity', id);
+
+  const patch: Partial<typeof activities.$inferInsert> = {};
+  if (body.completed === true) patch.completedAt = new Date();
+  if (body.completed === false) patch.completedAt = null;
+  if (body.dueAt !== undefined) {
+    patch.dueAt = body.dueAt ? new Date(body.dueAt) : null;
+  }
+
+  const [activity] = await db
+    .update(activities)
+    .set(patch)
+    .where(and(eq(activities.id, id), eq(activities.organizationId, tenant.organizationId)))
+    .returning();
+
+  await audit(c, 'sales.activity.update', 'activity', id);
+
+  return c.json({ activity });
+});
+
 // ============================================================
 // Pipeline Summary
 // ============================================================

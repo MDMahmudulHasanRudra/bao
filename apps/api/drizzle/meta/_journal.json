@@ -15,6 +15,20 @@
       "when": 1790176464900,
       "tag": "0001_slim_ares",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790266893384,
+      "tag": "0002_curvy_expediter",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790340911760,
+      "tag": "0003_red_firebrand",
+      "breakpoints": true
     }
   ]
 }
