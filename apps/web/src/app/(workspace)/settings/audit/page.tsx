@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import { isPermissionError } from '@/lib/errors';
+import SettingsPage from '@/components/settings/SettingsPage';
 
 type AuditEvent = {
   id: string;
@@ -13,14 +15,6 @@ type AuditEvent = {
   ipAddress?: string | null;
   createdAt: string;
 };
-
-function isPermissionError(err: unknown): boolean {
-  return err instanceof Error && /Missing permission|Forbidden/i.test(err.message);
-}
-
-function errMsg(e: unknown) {
-  return e instanceof Error ? e.message : 'Request failed';
-}
 
 const ACTION_BADGES: Record<string, string> = {
   'ai.assistant.run': 'bg-sky-100 text-sky-700',
@@ -39,20 +33,20 @@ const ACTION_BADGES: Record<string, string> = {
 export default function AuditPage() {
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<unknown>(null);
   const [unauthorized, setUnauthorized] = useState(false);
   const [filter, setFilter] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
-    setError('');
+    setError(null);
     setUnauthorized(false);
     try {
       const data = await api<{ events: AuditEvent[] }>('/api/v1/audit?limit=100');
       setEvents(data.events || []);
     } catch (err) {
       if (isPermissionError(err)) setUnauthorized(true);
-      else setError(errMsg(err));
+      else setError(err);
     } finally {
       setLoading(false);
     }
@@ -65,54 +59,20 @@ export default function AuditPage() {
   const visible = filter ? events.filter((e) => e.action.startsWith(filter)) : events;
   const prefixes = [...new Set(events.map((e) => e.action.split('.')[0]))].sort();
 
-  if (loading) {
-    return (
-      <div
-        role="status"
-        className="flex min-h-[40vh] items-center justify-center text-sm text-slate-500"
-      >
-        Loading audit log…
-      </div>
-    );
-  }
-
-  if (unauthorized) {
-    return (
-      <div className="max-w-xl rounded-xl border border-amber-200 bg-amber-50 p-6">
-        <h1 className="text-lg font-semibold text-amber-900">Audit Log</h1>
-        <p className="mt-2 text-sm text-amber-800" role="alert">
-          You don’t have permission to view the audit log. Ask an owner or admin.
-        </p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div role="alert" className="mx-auto max-w-md rounded-xl border border-red-200 bg-white p-6">
-        <p className="text-sm text-slate-700">{error}</p>
-        <button
-          type="button"
-          onClick={() => void load()}
-          className="mt-4 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-        >
-          Retry
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <div className="mx-auto max-w-4xl space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold text-slate-900">Audit Log</h1>
-          <p className="text-sm text-slate-500">
-            {events.length === 0
-              ? 'No events yet'
-              : `${visible.length} of ${events.length} recent events · secrets are masked`}
-          </p>
-        </div>
+    <SettingsPage
+      title="Audit Log"
+      width="full"
+      loading={loading}
+      unauthorized={unauthorized}
+      error={error}
+      onRetry={() => void load()}
+      description={
+        events.length === 0
+          ? 'No events yet'
+          : `${visible.length} of ${events.length} recent events · secrets are masked`
+      }
+      action={
         <div className="flex gap-2">
           <label htmlFor="audit-filter" className="sr-only">
             Filter by action
@@ -138,8 +98,8 @@ export default function AuditPage() {
             Refresh
           </button>
         </div>
-      </div>
-
+      }
+    >
       {visible.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
           <p className="text-sm font-medium text-slate-600">
@@ -186,6 +146,6 @@ export default function AuditPage() {
           })}
         </ul>
       )}
-    </div>
+    </SettingsPage>
   );
 }

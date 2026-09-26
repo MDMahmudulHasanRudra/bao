@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api, getUser } from '@/lib/api';
+import { errMsg } from '@/lib/errors';
 
 const STAGES = [
   'new',
@@ -75,10 +76,6 @@ type Activity = {
 };
 
 type Tab = 'pipeline' | 'companies' | 'contacts' | 'activities';
-
-function errMsg(e: unknown) {
-  return e instanceof Error ? e.message : 'Request failed';
-}
 
 function friendlyStageError(message: string) {
   if (/Invalid stage transition/i.test(message)) {
@@ -177,7 +174,7 @@ export default function SalesPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-lg font-semibold text-slate-900">Sales</h1>
+        <h1 className="text-lg font-semibold text-slate-900">Leads &amp; CRM</h1>
         <button
           type="button"
           onClick={() => void load()}

@@ -2,6 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
+import {
+  OperationBadge,
+  sourceOperationError,
+  sourceOperationState,
+  type OperationState,
+} from '@/components/operations/OperationCard';
 
 type Source = {
   id: string;
@@ -26,12 +32,20 @@ type SearchHit = {
   score: number;
 };
 
-const STATUS_BADGES: Record<string, { label: string; cls: string }> = {
-  pending: { label: 'Queued', cls: 'bg-amber-100 text-amber-800' },
-  processing: { label: 'Processing', cls: 'bg-indigo-100 text-indigo-700' },
-  ready: { label: 'Ready', cls: 'bg-emerald-100 text-emerald-800' },
-  error: { label: 'Error', cls: 'bg-rose-100 text-rose-700' },
-};
+/** Spec 5: the shared vocabulary replaces this page's private status table. */
+function sourceStage(state: OperationState): string {
+  if (state === 'queued') return 'Waiting to start.';
+  if (state === 'running') return 'Reading and indexing this document.';
+  if (state === 'completed') return 'Indexed and searchable.';
+  return 'This document could not be read.';
+}
+
+function sourceNextStep(state: OperationState): string {
+  if (state === 'queued' || state === 'running')
+    return 'Nothing to do — indexing starts on its own and survives a page reload.';
+  if (state === 'completed') return 'Ask Business AI a question to see what this source can answer.';
+  return 'Check the file or link, then upload it again.';
+}
 
 function formatBytes(n: number | null): string {
   if (n == null) return '';
@@ -477,9 +491,14 @@ export default function KnowledgePage() {
       {/* Source list */}
       <section aria-labelledby="sources-heading">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <h2 id="sources-heading" className="text-sm font-semibold text-slate-900">
-            Sources
-          </h2>
+          <div>
+            <h2 id="sources-heading" className="text-sm font-semibold text-slate-900">
+              Sources
+            </h2>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Status is saved to knowledge_sources, so it survives a reload.
+            </p>
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <label htmlFor="kkindfilter" className="sr-only">
               Filter by kind
@@ -541,11 +560,8 @@ export default function KnowledgePage() {
         ) : (
           <ul className="space-y-2">
             {visible.map((s) => {
-              const badge = STATUS_BADGES[s.status] ?? {
-                label: s.status,
-                cls: 'bg-slate-100 text-slate-600',
-              };
-              const errText = s.status === 'error' ? s.metadata?.error : undefined;
+              const state = sourceOperationState(s);
+              const errText = sourceOperationError(s);
               return (
                 <li
                   key={s.id}
@@ -554,11 +570,7 @@ export default function KnowledgePage() {
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="truncate text-sm font-medium text-slate-900">{s.title}</p>
-                      <span
-                        className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${badge.cls}`}
-                      >
-                        {badge.label}
-                      </span>
+                      <OperationBadge state={state} />
                       <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium uppercase text-slate-500">
                         {s.type}
                       </span>
@@ -588,6 +600,9 @@ export default function KnowledgePage() {
                         {errText}
                       </p>
                     )}
+                    {state === 'running' || state === 'queued' ? (
+                      <p className="mt-1 text-xs text-slate-600">{sourceStage(state)}</p>
+                    ) : null}
                     {rowMsg && rowMsg.id === s.id && (
                       <p
                         className={`mt-1 text-xs ${rowMsg.ok ? 'text-emerald-700' : 'text-rose-600'}`}
@@ -634,7 +649,14 @@ export default function KnowledgePage() {
                             </div>
                             <div>
                               <dt className="font-medium text-slate-600">Status</dt>
-                              <dd>{detail?.status ?? s.status}</dd>
+                              <dd>
+                                <span className="inline-flex items-center gap-1.5">
+                                  <OperationBadge state={sourceOperationState(s)} />
+                                  <span className="text-slate-600">
+                                    {sourceStage(state)}
+                                  </span>
+                                </span>
+                              </dd>
                             </div>
                             <div>
                               <dt className="font-medium text-slate-600">Created</dt>
@@ -654,6 +676,10 @@ export default function KnowledgePage() {
                             )}
                           </dl>
                         )}
+                        <p className="mt-2 text-xs text-slate-600">
+                          <span className="font-medium">What to do next:</span>{' '}
+                          {sourceNextStep(state)}
+                        </p>
                       </div>
                     )}
                   </div>

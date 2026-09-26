@@ -348,8 +348,13 @@ describe('onboarding UI contracts (completion slice A)', () => {
   });
 
   it('layout exposes Members nav and multi-org switcher', () => {
+    // Members is reached through the settings sub-navigation, not a standalone nav row.
+    const nav = readFileSync(
+      resolve(__dirname, '../../apps/web/src/components/workspace-nav.ts'),
+      'utf-8',
+    );
+    expect(nav).toMatch(/\/settings\/members/);
     const src = web('(workspace)/layout.tsx');
-    expect(src).toMatch(/\/settings\/members/);
     expect(src).toMatch(/org-switcher/);
     expect(src).toMatch(/switchOrg/);
   });

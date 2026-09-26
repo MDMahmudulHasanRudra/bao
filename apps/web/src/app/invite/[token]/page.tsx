@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { api, getToken, inviteRegisterPath } from '@/lib/api';
+import { errMsg } from '@/lib/errors';
 
 type InviteInfo = {
   username: string;
@@ -11,10 +12,6 @@ type InviteInfo = {
   organizationName: string;
   expiresAt: string;
 };
-
-function errMsg(e: unknown) {
-  return e instanceof Error ? e.message : 'Request failed';
-}
 
 export default function InvitePage() {
   const params = useParams<{ token: string }>();

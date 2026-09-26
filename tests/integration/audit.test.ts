@@ -230,21 +230,32 @@ describe('Audit log UI contract (P1-6)', () => {
 
   it('page has loading, unauthorized, error+retry, empty, and filter states', () => {
     const src = readFileSync(pagePath, 'utf-8');
+    // Loading / error / retry / 403 are the shared shell's job; the page wires
+    // them up and owns only the audit-specific copy.
+    const shell = readFileSync(
+      resolve(__dirname, '../../apps/web/src/components/settings/SettingsPage.tsx'),
+      'utf-8',
+    );
     expect(src).toMatch(/\/api\/v1\/audit/);
-    expect(src).toMatch(/Loading audit log/);
-    expect(src).toMatch(/role="alert"/);
-    expect(src).toMatch(/Retry/);
-    expect(src).toMatch(/permission to view the audit log/);
+    expect(src).toMatch(/<SettingsPage/);
+    expect(src).toMatch(/loading=\{loading\}/);
+    expect(src).toMatch(/unauthorized=\{unauthorized\}/);
+    expect(src).toMatch(/error=\{error\}/);
+    expect(src).toMatch(/onRetry=\{\(\) => void load\(\)\}/);
+    expect(shell).toMatch(/role="alert"/);
+    expect(shell).toMatch(/Retry/);
+    expect(shell).toMatch(/do not have access to these settings/);
     expect(src).toMatch(/No audit events yet/);
     expect(src).toMatch(/No events match this filter/);
     expect(src).toMatch(/secrets are masked/);
   });
 
   it('shell links to audit log', () => {
-    const layout = readFileSync(
-      resolve(__dirname, '../../apps/web/src/app/(workspace)/layout.tsx'),
+    // Nav data lives in workspace-nav.ts; the layout only renders it.
+    const nav = readFileSync(
+      resolve(__dirname, '../../apps/web/src/components/workspace-nav.ts'),
       'utf-8',
     );
-    expect(layout).toMatch(/href: '\/settings\/audit'/);
+    expect(nav).toMatch(/href: '\/settings\/audit'/);
   });
 });

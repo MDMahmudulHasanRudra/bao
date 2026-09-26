@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api } from '@/lib/api';
+import { errMsg } from '@/lib/errors';
+import SettingsPage from '@/components/settings/SettingsPage';
 
 type OrgSettings = {
   companyName?: string;
@@ -13,13 +15,9 @@ type OrgSettings = {
   notificationEmail?: string;
 };
 
-function errMsg(e: unknown) {
-  return e instanceof Error ? e.message : 'Request failed';
-}
-
 export default function OrganizationSettingsPage() {
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [flash, setFlash] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -34,7 +32,7 @@ export default function OrganizationSettingsPage() {
       setSettings(res.settings || {});
       setForm(res.settings || {});
     } catch (err) {
-      setError(errMsg(err));
+      setError(err);
     } finally {
       setLoading(false);
     }
@@ -89,54 +87,20 @@ export default function OrganizationSettingsPage() {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
-  if (loading) {
-    return (
-      <div
-        role="status"
-        className="flex min-h-[40vh] items-center justify-center text-sm text-slate-500"
-      >
-        Loading organization settings…
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div role="alert" className="mx-auto max-w-md rounded-xl border border-red-200 bg-white p-6">
-        <p className="text-sm text-slate-700">{error}</p>
-        <button
-          type="button"
-          onClick={() => void load()}
-          className="mt-4 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-        >
-          Retry
-        </button>
-      </div>
-    );
-  }
+  const dirty = Object.keys(form).some(
+    (k) => form[k as keyof OrgSettings] !== settings[k as keyof OrgSettings],
+  );
 
   return (
-    <div className="mx-auto max-w-xl space-y-6">
-      <div>
-        <h1 className="text-lg font-semibold text-slate-900">Organization settings</h1>
-        <p className="text-sm text-slate-500">
-          Known fields only — unknown keys are rejected by the API (validated shape).
-        </p>
-      </div>
-
-      {flash && (
-        <p
-          role={flash.ok ? 'status' : 'alert'}
-          className={`rounded-lg border px-3 py-2 text-sm ${
-            flash.ok
-              ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-              : 'border-red-200 bg-red-50 text-red-700'
-          }`}
-        >
-          {flash.text}
-        </p>
-      )}
-
+    <SettingsPage
+      title="Organization settings"
+      description="Known fields only — unknown keys are rejected by the API (validated shape)."
+      loading={loading}
+      error={error}
+      onRetry={() => void load()}
+      notice={flash}
+      dirty={dirty}
+    >
       <form
         onSubmit={(e) => void save(e)}
         className="space-y-4 rounded-xl border border-slate-200 bg-white p-5"
@@ -267,6 +231,6 @@ export default function OrganizationSettingsPage() {
           </p>
         </div>
       </form>
-    </div>
+    </SettingsPage>
   );
 }

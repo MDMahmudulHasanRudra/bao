@@ -6,8 +6,11 @@ import {
   knowledgeSources,
   aiConversations,
   notifications,
+  aiProviders,
+  researchJobs,
+  leadCandidates,
 } from '../../db/schema.js';
-import { eq, and, sql, desc, isNull, isNotNull, lte, gte } from 'drizzle-orm';
+import { eq, and, sql, desc, isNull, isNotNull, lte, gte, inArray } from 'drizzle-orm';
 import { getTenant } from '../../core/tenancy/context.js';
 
 const dashboard = new Hono();
@@ -121,6 +124,43 @@ dashboard.get('/', async (c) => {
       ),
     );
 
+  // Spec 7: the dashboard must know whether the main action is available, and
+  // what needs a human. Counts only — no progress or state is invented here.
+  const [providerStats] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(aiProviders)
+    .where(and(eq(aiProviders.organizationId, tenant.organizationId), eq(aiProviders.status, 'active')));
+
+  const [runningJobs] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(researchJobs)
+    .where(
+      and(
+        eq(researchJobs.organizationId, tenant.organizationId),
+        inArray(researchJobs.status, ['queued', 'discovering', 'analyzing']),
+      ),
+    );
+
+  const [failedJobs] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(researchJobs)
+    .where(
+      and(
+        eq(researchJobs.organizationId, tenant.organizationId),
+        eq(researchJobs.status, 'failed'),
+      ),
+    );
+
+  const [reviewLeads] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(leadCandidates)
+    .where(
+      and(
+        eq(leadCandidates.organizationId, tenant.organizationId),
+        eq(leadCandidates.status, 'review_required'),
+      ),
+    );
+
   return c.json({
     pipeline,
     recentActivities,
@@ -131,6 +171,13 @@ dashboard.get('/', async (c) => {
     },
     aiConversationsCount: aiStats.count,
     unreadNotifications: notifStats.count,
+    // Counts the web needs so it can decide what to show without inventing it.
+    aiConfigured: providerStats.count > 0,
+    attention: {
+      runningOperations: runningJobs.count,
+      failedOperations: failedJobs.count,
+      awaitingReview: reviewLeads.count,
+    },
     range: { from: from.toISOString(), to: to.toISOString(), days },
   });
 });

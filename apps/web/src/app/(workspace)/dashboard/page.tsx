@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { errMsg } from '@/lib/errors';
 import { LineChart, AreaChart, FunnelChart } from '@/components/charts';
 import { KPICard, Section, TimeRangeSelector, LiveIndicator } from '@/components/dashboard';
 
@@ -24,6 +25,13 @@ type DashboardData = {
   knowledgeStats: { totalSources: number; readySources: number };
   aiConversationsCount: number;
   unreadNotifications: number;
+  /** Spec 7: the main action is only "Ask Business AI" when a provider is live. */
+  aiConfigured?: boolean;
+  attention?: {
+    runningOperations: number;
+    failedOperations: number;
+    awaitingReview: number;
+  };
   range: { from: string; to: string; days: number };
 };
 
@@ -150,8 +158,24 @@ function formatNumber(value: number) {
   return new Intl.NumberFormat('en-US').format(value);
 }
 
-function errMsg(e: unknown) {
-  return e instanceof Error ? e.message : 'Request failed';
+/**
+ * Spec 7: a KPI trend must be measured, not decorative. The daily series is
+ * split in half so the change is real, and with no baseline to compare against
+ * the trend is omitted instead of guessed.
+ */
+function measuredDelta(
+  daily: TrendData['daily'] | undefined,
+  key: 'leads' | 'won' | 'wonValue' | 'activities',
+): { trend: 'up' | 'down' | 'neutral'; value: string } | null {
+  if (!daily || daily.length < 4) return null;
+  const half = Math.floor(daily.length / 2);
+  const sum = (rows: TrendData['daily']) => rows.reduce((total, row) => total + (row[key] ?? 0), 0);
+  const previous = sum(daily.slice(0, half));
+  const current = sum(daily.slice(half));
+  if (previous <= 0) return null;
+  const pct = Math.round(((current - previous) / previous) * 100);
+  if (pct === 0) return { trend: 'neutral', value: '0%' };
+  return { trend: pct > 0 ? 'up' : 'down', value: `${pct > 0 ? '+' : ''}${pct}%` };
 }
 
 export default function DashboardPage() {
@@ -300,45 +324,129 @@ export default function DashboardPage() {
   const ready = data?.knowledgeStats.readySources ?? 0;
   const conversionRate = totalLeads > 0 ? Math.round((wonLeads / totalLeads) * 100) : 0;
 
+  const leadDelta = measuredDelta(trends?.daily, 'leads');
+  const wonDelta = measuredDelta(trends?.daily, 'won');
+  const wonValueDelta = measuredDelta(trends?.daily, 'wonValue');
+
   const kpis = [
     {
       label: 'Total Leads',
       value: formatNumber(totalLeads),
-      trend: 'up' as const,
-      trendValue: '+12%',
+      trend: leadDelta?.trend ?? ('neutral' as const),
+      trendValue: leadDelta?.value,
       source: 'dashboard · pipeline',
       icon: KPI_ICONS.leads,
     },
     {
       label: 'Won Deals',
       value: formatNumber(wonLeads),
-      trend: 'up' as const,
-      trendValue: '+8%',
+      trend: wonDelta?.trend ?? ('neutral' as const),
+      trendValue: wonDelta?.value,
       source: 'dashboard · stage=closed_won',
       icon: KPI_ICONS.won,
     },
     {
-      label: 'Pipeline Value',
+      label: 'Won Value',
       value: formatCurrency(totalWonValue),
-      trend: 'up' as const,
-      trendValue: '+15%',
+      trend: wonValueDelta?.trend ?? ('neutral' as const),
+      trendValue: wonValueDelta?.value,
       source: 'dashboard · sum(won value)',
       icon: KPI_ICONS.won,
     },
     {
       label: 'Conversion Rate',
       value: `${conversionRate}%`,
-      trend:
-        conversionRate > 20
-          ? ('up' as const)
-          : conversionRate > 10
-            ? ('neutral' as const)
-            : ('down' as const),
-      trendValue: conversionRate > 20 ? '+2%' : conversionRate > 10 ? '—' : '-3%',
+      trend: 'neutral' as const,
+      // No endpoint stores a historical conversion rate, so no trend is claimed.
+      trendValue: undefined,
       source: 'dashboard · won/total',
       icon: KPI_ICONS.leads,
     },
   ];
+
+  // Spec 7 items 1-4, all derived from data this page already loaded.
+  const attention = data?.attention;
+  const overdueCount = (data?.upcomingActivities ?? []).filter(
+    (a) => new Date(a.dueAt) < new Date(),
+  ).length;
+  const attentionItems = [
+    {
+      label: 'Follow-ups due or overdue',
+      count: (data?.upcomingActivities ?? []).length,
+      detail: overdueCount > 0 ? `${overdueCount} overdue` : 'All on time',
+      href: '/sales',
+    },
+    {
+      label: 'Operations running now',
+      count: attention?.runningOperations ?? 0,
+      detail: 'Research runs still working',
+      href: '/lead-intelligence',
+    },
+    {
+      label: 'Operations failed',
+      count: attention?.failedOperations ?? 0,
+      detail: 'Stopped safely, nothing half-written',
+      href: '/lead-intelligence',
+    },
+    {
+      label: 'Leads waiting for your review',
+      count: attention?.awaitingReview ?? 0,
+      detail: 'Scored, not yet approved or rejected',
+      href: '/lead-intelligence',
+    },
+  ].filter((item) => item.count > 0);
+
+  // First-use checklist. Spec 7 allows persisting/dismissing only through a real
+  // state contract, and none exists, so every item is derived and none can be
+  // dismissed. It disappears on its own once the work is genuinely done.
+  const onboarding = [
+    { label: 'Connect an AI provider', done: data?.aiConfigured === true, href: '/settings/ai-providers' },
+    { label: 'Add your first knowledge source', done: knowledge > 0, href: '/knowledge' },
+    { label: 'Add your first lead', done: totalLeads > 0, href: '/sales' },
+    { label: 'Ask your first question', done: (data?.aiConversationsCount ?? 0) > 0, href: '/assistant' },
+  ];
+  const onboardingLeft = onboarding.filter((item) => !item.done).length;
+
+  const insights = [
+    knowledge > 0 && ready > 0
+      ? {
+          text: `${ready} of your ${knowledge} knowledge sources are indexed and ready to answer questions.`,
+          href: '/knowledge',
+        }
+      : null,
+    overdueCount > 0
+      ? {
+          text: `${overdueCount} follow-up${overdueCount === 1 ? ' is' : 's are'} overdue.`,
+          href: '/sales',
+        }
+      : null,
+    (attention?.awaitingReview ?? 0) > 0
+      ? {
+          text: `${attention?.awaitingReview} scored lead${attention?.awaitingReview === 1 ? '' : 's'} need your review before they count as qualified.`,
+          href: '/lead-intelligence',
+        }
+      : null,
+    (attention?.failedOperations ?? 0) > 0
+      ? {
+          text: `${attention?.failedOperations} research run${attention?.failedOperations === 1 ? '' : 's'} stopped. Nothing was half-written, so you can start again.`,
+          href: '/lead-intelligence',
+        }
+      : null,
+    wonLeads > 0
+      ? {
+          text: `${wonLeads} deal${wonLeads === 1 ? '' : 's'} closed in this window, worth ${formatCurrency(totalWonValue)}.`,
+          href: '/sales',
+        }
+      : null,
+  ].filter(Boolean) as { text: string; href: string }[];
+
+  // Without a live provider, asking a question cannot work — so the main action
+  // becomes the setup step that unblocks it.
+  const aiReady = data?.aiConfigured === true;
+  const mainAction = aiReady
+    ? { href: '/assistant', label: 'Ask Business AI' }
+    : { href: '/settings/ai-providers', label: 'Connect an AI provider' };
+  const attentionTotal = attentionItems.reduce((total, item) => total + item.count, 0);
 
   return (
     <div className="space-y-6">
@@ -355,15 +463,16 @@ export default function DashboardPage() {
               onCustomChange={handleCustomRangeChange}
             />
             <LiveIndicator
-              isLive={true}
+              isLive={autoRefresh}
               lastUpdated={lastRefresh ?? undefined}
               onRefresh={handleRefresh}
               refreshing={refreshing}
               autoRefresh={autoRefresh}
               onAutoRefreshToggle={setAutoRefresh}
             />
+            {/* Spec 7: the main action must match what is actually possible. */}
             <Link
-              href="/assistant"
+              href={mainAction.href}
               className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700"
             >
               <svg
@@ -376,7 +485,7 @@ export default function DashboardPage() {
               >
                 <path d="m12 3 1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8L12 3z" />
               </svg>
-              Ask Business AI
+              {mainAction.label}
             </Link>
           </div>
         }
@@ -385,7 +494,9 @@ export default function DashboardPage() {
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">Dashboard</h1>
             <p className="mt-1 text-sm text-slate-500">
-              Real-time overview of your business metrics
+              {attentionTotal > 0
+                ? `${attentionTotal} item${attentionTotal === 1 ? '' : 's'} need you today.`
+                : 'Nothing needs you right now.'}
             </p>
           </div>
         </div>
@@ -404,6 +515,150 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
+
+      {/* Spec 7 order: context and main action, then first-use checklist, then
+          what needs a human, then insights, then metrics, then quick actions. */}
+      {onboardingLeft > 0 && (
+        <Section
+          title="Get set up"
+          subtitle={`${onboardingLeft} step${onboardingLeft === 1 ? '' : 's'} left. Each one unlocks something real.`}
+          source="dashboard · derived from live data"
+        >
+          <ul className="grid gap-2 sm:grid-cols-2">
+            {onboarding.map((item) => (
+              <li key={item.label}>
+                <Link
+                  href={item.href}
+                  className={`flex items-center gap-2.5 rounded-lg border px-3 py-2.5 text-sm hover:bg-slate-50 ${
+                    item.done
+                      ? 'border-slate-200 text-slate-500'
+                      : 'border-slate-200 text-slate-800'
+                  }`}
+                >
+                  <span
+                    aria-hidden
+                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+                      item.done ? 'bg-emerald-100 text-emerald-700' : 'bg-indigo-100 text-indigo-700'
+                    }`}
+                  >
+                    {item.done ? '✓' : ''}
+                  </span>
+                  <span className={item.done ? 'line-through' : ''}>{item.label}</span>
+                  {item.done && <span className="sr-only">(done)</span>}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
+
+      <Section
+        title="My attention"
+        subtitle={
+          attentionTotal > 0
+            ? `${attentionTotal} item${attentionTotal === 1 ? '' : 's'} waiting on you`
+            : 'Nothing is waiting on you'
+        }
+        source="dashboard · attention"
+        action={
+          <Link href="/sales" className="text-xs font-medium text-indigo-600 hover:text-indigo-700">
+            Open sales →
+          </Link>
+        }
+      >
+        {attentionItems.length === 0 ? (
+          <p className="py-3 text-sm text-slate-500">
+            No due follow-ups, no running or failed operations, nothing waiting for review.
+          </p>
+        ) : (
+          <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            {attentionItems.map((item) => (
+              <li key={item.label}>
+                <Link
+                  href={item.href}
+                  className="block rounded-lg border border-slate-200 px-3 py-2.5 hover:border-indigo-300 hover:bg-indigo-50"
+                >
+                  <p className="text-2xl font-semibold text-slate-900 tabular-nums">{item.count}</p>
+                  <p className="text-xs font-medium text-slate-700">{item.label}</p>
+                  <p className="text-[11px] text-slate-500">{item.detail}</p>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+
+      {/* Follow-ups Section */}
+      {(data?.upcomingActivities?.length ?? 0) > 0 && (
+        <Section
+          title="Follow-ups to complete"
+          subtitle="Due within 7 days (includes overdue)"
+          source="activities · due within 7 days"
+          freshness="live"
+          action={
+            <Link
+              href="/sales"
+              className="text-xs font-medium text-indigo-600 hover:text-indigo-700"
+            >
+              Open sales →
+            </Link>
+          }
+        >
+          <ul className="divide-y divide-slate-100">
+            {data!.upcomingActivities.map((a) => {
+              const overdue = new Date(a.dueAt) < new Date();
+              return (
+                <li key={a.id} className="flex flex-wrap items-center gap-3 py-3">
+                  <span className="rounded bg-indigo-50 px-2 py-0.5 text-[11px] font-medium uppercase text-indigo-700">
+                    {a.type}
+                  </span>
+                  <p className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">
+                    {a.subject}
+                  </p>
+                  <span
+                    className={`text-xs font-medium ${overdue ? 'text-rose-600' : 'text-slate-500'}`}
+                  >
+                    {overdue ? 'Overdue' : 'Due'} {new Date(a.dueAt).toLocaleDateString()}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={followBusy === a.id}
+                    onClick={() => void handleCompleteFollowUp(a.id)}
+                    className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    Complete
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </Section>
+      )}
+
+      <Section
+        title="What changed"
+        subtitle="Only what your own data shows. Each insight opens the place it came from."
+        source="dashboard · derived from live data"
+      >
+        {insights.length === 0 ? (
+          <p className="py-3 text-sm text-slate-500">
+            Nothing to report yet. Add a lead or a knowledge source and this fills in.
+          </p>
+        ) : (
+          <ul className="divide-y divide-slate-100">
+            {insights.map((insight) => (
+              <li key={insight.text} className="py-2.5">
+                <Link href={insight.href} className="group flex items-center justify-between gap-3">
+                  <span className="text-sm text-slate-700">{insight.text}</span>
+                  <span className="shrink-0 text-xs font-medium text-indigo-600 group-hover:text-indigo-700">
+                    Open →
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
 
       {/* KPI Row - Horizontal scroll on mobile */}
       <Section
@@ -622,53 +877,6 @@ export default function DashboardPage() {
         </Section>
       </div>
 
-      {/* Follow-ups Section */}
-      {(data?.upcomingActivities?.length ?? 0) > 0 && (
-        <Section
-          title="Follow-ups"
-          subtitle="Due within 7 days (includes overdue)"
-          source="activities · due within 7 days"
-          freshness="live"
-          action={
-            <Link
-              href="/sales"
-              className="text-xs font-medium text-indigo-600 hover:text-indigo-700"
-            >
-              Open sales →
-            </Link>
-          }
-        >
-          <ul className="divide-y divide-slate-100">
-            {data!.upcomingActivities.map((a) => {
-              const overdue = new Date(a.dueAt) < new Date();
-              return (
-                <li key={a.id} className="flex flex-wrap items-center gap-3 py-3">
-                  <span className="rounded bg-indigo-50 px-2 py-0.5 text-[11px] font-medium uppercase text-indigo-700">
-                    {a.type}
-                  </span>
-                  <p className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">
-                    {a.subject}
-                  </p>
-                  <span
-                    className={`text-xs font-medium ${overdue ? 'text-rose-600' : 'text-slate-500'}`}
-                  >
-                    {overdue ? 'Overdue' : 'Due'} {new Date(a.dueAt).toLocaleDateString()}
-                  </span>
-                  <button
-                    type="button"
-                    disabled={followBusy === a.id}
-                    onClick={() => void handleCompleteFollowUp(a.id)}
-                    className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-                  >
-                    Complete
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </Section>
-      )}
-
       {/* Quick Actions + Knowledge + AI Usage */}
       <div className="grid gap-4 lg:grid-cols-3">
         <Section
@@ -756,7 +964,7 @@ export default function DashboardPage() {
               Create Proposal
             </Link>
             <Link
-              href="/assistant"
+              href={aiReady ? '/assistant' : '/settings/ai-providers'}
               className="rounded-lg border border-slate-200 px-3 py-2 text-center text-xs font-medium text-slate-700 hover:border-indigo-300 hover:bg-indigo-50"
             >
               <svg
@@ -767,9 +975,9 @@ export default function DashboardPage() {
                 stroke="currentColor"
                 strokeWidth="2"
               >
-                <path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8L12 3z" />
+                <path d="m12 3 1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8L12 3z" />
               </svg>
-              Ask AI
+              {aiReady ? 'Ask AI' : 'Connect AI'}
             </Link>
           </div>
         </Section>
@@ -828,10 +1036,10 @@ export default function DashboardPage() {
         </div>
       </Section>
 
-      {/* Sticky Ask AI on mobile */}
+      {/* Sticky main action on mobile */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 p-4 bg-white/95 backdrop-blur-sm border-t border-slate-200">
         <Link
-          href="/assistant"
+          href={mainAction.href}
           className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-3 text-sm font-medium text-white shadow-lg hover:bg-indigo-700"
         >
           <svg
@@ -844,7 +1052,7 @@ export default function DashboardPage() {
           >
             <path d="m12 3 1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8L12 3z" />
           </svg>
-          Ask Business AI
+          {mainAction.label}
         </Link>
       </div>
     </div>

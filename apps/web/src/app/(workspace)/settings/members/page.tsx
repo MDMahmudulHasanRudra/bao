@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api, getUser, getMemberships } from '@/lib/api';
+import { errMsg } from '@/lib/errors';
+import SettingsPage from '@/components/settings/SettingsPage';
 
 type Member = {
   id: string;
@@ -22,10 +24,6 @@ type PendingInvite = {
 
 const ROLES = ['owner', 'admin', 'manager', 'sales', 'contributor', 'analyst', 'member', 'viewer'];
 
-function errMsg(e: unknown) {
-  return e instanceof Error ? e.message : 'Request failed';
-}
-
 function inviteUrl(token: string) {
   if (typeof window === 'undefined') return `/invite/${token}`;
   return `${window.location.origin}/invite/${token}`;
@@ -37,7 +35,7 @@ export default function MembersSettingsPage() {
   const canManage = myMembership?.role === 'owner' || myMembership?.role === 'admin';
 
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   const [flash, setFlash] = useState<{ ok: boolean; text: string } | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [invites, setInvites] = useState<PendingInvite[]>([]);
@@ -60,7 +58,7 @@ export default function MembersSettingsPage() {
       setMembers(m.members);
       setInvites(i.invites);
     } catch (err) {
-      setError(errMsg(err));
+      setError(err);
     } finally {
       setLoading(false);
     }
@@ -149,54 +147,16 @@ export default function MembersSettingsPage() {
     }
   }
 
-  if (loading) {
-    return (
-      <div
-        role="status"
-        className="flex min-h-[40vh] items-center justify-center text-sm text-slate-500"
-      >
-        Loading members…
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div role="alert" className="mx-auto max-w-md rounded-xl border border-red-200 bg-white p-6">
-        <p className="text-sm text-slate-700">{error}</p>
-        <button
-          type="button"
-          onClick={() => void load()}
-          className="mt-4 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-        >
-          Retry
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <div>
-        <h1 className="text-lg font-semibold text-slate-900">Members</h1>
-        <p className="text-sm text-slate-500">
-          Invite people, change roles, and manage pending invites. Owner/admin only for changes.
-        </p>
-      </div>
-
-      {flash && (
-        <p
-          role={flash.ok ? 'status' : 'alert'}
-          className={`rounded-lg border px-3 py-2 text-sm ${
-            flash.ok
-              ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-              : 'border-red-200 bg-red-50 text-red-700'
-          }`}
-        >
-          {flash.text}
-        </p>
-      )}
-
+    <SettingsPage
+      title="Members"
+      description="Invite people, change roles, and manage pending invites. Owner/admin only for changes."
+      width="wide"
+      loading={loading}
+      error={error}
+      onRetry={() => void load()}
+      notice={flash}
+    >
       {canManage && (
         <form
           onSubmit={(e) => void onInvite(e)}
@@ -390,6 +350,6 @@ export default function MembersSettingsPage() {
           </ul>
         </div>
       )}
-    </div>
+    </SettingsPage>
   );
 }

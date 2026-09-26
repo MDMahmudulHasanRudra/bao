@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import { errMsg } from '@/lib/errors';
 import { LineChart, AreaChart, BarChart } from '@/components/charts';
 import { KPICard, Section, TimeRangeSelector, LiveIndicator } from '@/components/dashboard';
 
@@ -97,10 +98,6 @@ function formatCurrency(value: number) {
 
 function formatNumber(value: number) {
   return new Intl.NumberFormat('en-US').format(value);
-}
-
-function errMsg(e: unknown) {
-  return e instanceof Error ? e.message : 'Request failed';
 }
 
 function formatDate(iso: string) {

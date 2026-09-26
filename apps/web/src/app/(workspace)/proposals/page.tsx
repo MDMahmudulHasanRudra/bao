@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api } from '@/lib/api';
+import { errMsg } from '@/lib/errors';
 
 type Template = {
   id: string;
@@ -29,10 +30,6 @@ type ProposalVersion = {
   content?: string | null;
   createdAt: string;
 };
-
-function errMsg(e: unknown) {
-  return e instanceof Error ? e.message : 'Request failed';
-}
 
 const STATUS_BADGES: Record<string, string> = {
   draft: 'bg-slate-100 text-slate-600',

@@ -2,6 +2,14 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api } from '@/lib/api';
+import { errMsg } from '@/lib/errors';
+import {
+  OperationBadge,
+  OperationCard,
+  researchOperationState,
+  type OperationState,
+  type StoredOperation,
+} from '@/components/operations/OperationCard';
 
 type JobStatus = 'queued' | 'discovering' | 'analyzing' | 'completed' | 'failed' | 'cancelled';
 type TaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
@@ -73,14 +81,47 @@ type IcpMatch = 'match' | 'unknown' | 'no_match';
 
 const TERMINAL: JobStatus[] = ['completed', 'failed', 'cancelled'];
 
-const JOB_TONE: Record<JobStatus, string> = {
-  queued: 'bg-slate-100 text-slate-600',
-  discovering: 'bg-sky-100 text-sky-700',
-  analyzing: 'bg-violet-100 text-violet-700',
-  completed: 'bg-emerald-100 text-emerald-700',
-  failed: 'bg-red-100 text-red-700',
-  cancelled: 'bg-slate-100 text-slate-500',
-};
+// Spec 5: the stored enum is never shown. Each state gets a plain stage, what it
+// did, and what a human should do next. The mappers live in OperationCard so
+// the vocabulary stays shared.
+function stageFor(job: Job, state: OperationState): string | undefined {
+  if (state === 'queued') return 'Waiting to start.';
+  if (state === 'running') {
+    return job.status === 'discovering'
+      ? 'Finding companies that match your criteria.'
+      : 'Reading each company and scoring it against your criteria.';
+  }
+  return undefined;
+}
+
+function summaryFor(job: Job, state: OperationState): string | undefined {
+  if (state !== 'completed' && state !== 'completed_with_warnings') return undefined;
+  const found = job.stats?.candidatesFound ?? 0;
+  const crawled = job.stats?.pagesCrawled ?? 0;
+  const failed = (job.progress?.failed ?? 0) + (job.stats?.errors ?? 0);
+  const base = `Read ${crawled} pages and found ${found} candidate${found === 1 ? '' : 's'}.`;
+  return state === 'completed_with_warnings'
+    ? `${base} ${failed} item${failed === 1 ? '' : 's'} could not be processed.`
+    : base;
+}
+
+function nextStepFor(state: OperationState): string | undefined {
+  switch (state) {
+    case 'queued':
+    case 'running':
+      return 'Nothing to do — progress is saved, so you can leave this page.';
+    case 'completed':
+      return 'Review the candidates and approve the ones worth pursuing.';
+    case 'completed_with_warnings':
+      return 'Review the results below, then start a new run if the gaps matter.';
+    case 'failed':
+      return 'Read the message above, fix the cause, then start a new run.';
+    case 'cancelled':
+      return 'Start a new run whenever you are ready.';
+    default:
+      return undefined;
+  }
+}
 
 const TASK_TONE: Record<TaskStatus, string> = {
   pending: 'bg-slate-100 text-slate-500',
@@ -88,6 +129,23 @@ const TASK_TONE: Record<TaskStatus, string> = {
   completed: 'bg-emerald-100 text-emerald-700',
   failed: 'bg-red-100 text-red-700',
   skipped: 'bg-slate-100 text-slate-400',
+};
+
+/** research_tasks.type → words a human can read. Mirrors RESEARCH_TASKS. */
+const STAGE_LABELS: Record<string, string> = {
+  discovery: 'Find companies',
+  fetch: 'Load pages',
+  extract: 'Read content',
+  normalize: 'Clean up data',
+  deduplicate: 'Remove duplicates',
+  classify: 'Classify',
+  icp_score: 'Score against ICP',
+  signal_detection: 'Find signals',
+  enrichment: 'Enrich records',
+  qualification: 'Qualify',
+  evidence: 'Attach evidence',
+  summary: 'Write summary',
+  review: 'Prepare for review',
 };
 
 const ICP_TONE: Record<IcpMatch, string> = {
@@ -104,10 +162,6 @@ function icpRows(raw: Record<string, string> | null | undefined): { key: string;
   return Object.entries(raw)
     .filter((entry): entry is [string, IcpMatch] => ICP_VERDICTS.includes(entry[1] as IcpMatch))
     .map(([key, verdict]) => ({ key, verdict }));
-}
-
-function errMsg(e: unknown) {
-  return e instanceof Error ? e.message : 'Request failed';
 }
 
 function relTime(iso: string) {
@@ -670,11 +724,7 @@ export default function LeadIntelligencePage() {
                       }`}
                     >
                       <div className="flex flex-wrap items-center gap-2">
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${JOB_TONE[j.status]}`}
-                        >
-                          {j.status}
-                        </span>
+                        <OperationBadge state={researchOperationState(j as StoredOperation)} />
                         <span className="text-xs text-slate-500">
                           {j.depth} · {relTime(j.createdAt)}
                         </span>
@@ -701,81 +751,56 @@ export default function LeadIntelligencePage() {
               </div>
             ) : (
               <>
-                <div className="rounded-xl border border-slate-200 bg-white p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                      <h2 className="text-sm font-semibold text-slate-900">{selectedJob.name}</h2>
-                      <p className="text-xs text-slate-500">
-                        Source: research_jobs · updated {relTime(selectedJob.updatedAt)}
-                      </p>
-                    </div>
-                    {!TERMINAL.includes(selectedJob.status) && (
+                <OperationCard
+                  title={selectedJob.name}
+                  state={researchOperationState(selectedJob as StoredOperation)}
+                  meta={`Saved to research_jobs · updated ${relTime(selectedJob.updatedAt)}`}
+                  stage={stageFor(selectedJob, researchOperationState(selectedJob as StoredOperation))}
+                  summary={summaryFor(
+                    selectedJob,
+                    researchOperationState(selectedJob as StoredOperation),
+                  )}
+                  nextStep={nextStepFor(researchOperationState(selectedJob as StoredOperation))}
+                  progress={
+                    selectedJob.progress
+                      ? {
+                          done: selectedJob.progress.processed ?? 0,
+                          total:
+                            selectedJob.progress.total ?? selectedJob.progress.discovered ?? 0,
+                          label: 'Companies processed',
+                        }
+                      : undefined
+                  }
+                  error={selectedJob.status === 'failed' ? selectedJob.error : null}
+                  actions={
+                    !TERMINAL.includes(selectedJob.status) ? (
                       <button
                         type="button"
                         disabled={busy}
                         onClick={() => void cancelJob()}
                         className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-50 disabled:opacity-50"
                       >
-                        {busy ? 'Cancelling…' : 'Cancel job'}
+                        {busy ? 'Cancelling…' : 'Cancel run'}
                       </button>
-                    )}
-                  </div>
-
-                  {selectedJob.error && (
-                    <p
-                      role="alert"
-                      className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700"
-                    >
-                      {selectedJob.error}
-                    </p>
-                  )}
-
-                  <div className="mt-3">
-                    <div className="flex items-center justify-between text-xs text-slate-500">
-                      <span>Progress</span>
-                      <span>
-                        {selectedJob.progress?.processed ?? 0} of{' '}
-                        {selectedJob.progress?.total ?? selectedJob.progress?.discovered ?? 0}
-                      </span>
+                    ) : null
+                  }
+                >
+                <dl className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+                  {(
+                    [
+                      ['Pages crawled', selectedJob.stats?.pagesCrawled],
+                      ['Candidates', selectedJob.stats?.candidatesFound],
+                      ['AI calls', selectedJob.stats?.aiCalls],
+                      ['Errors', selectedJob.stats?.errors],
+                    ] as const
+                  ).map(([label, value]) => (
+                    <div key={label} className="rounded-lg bg-slate-50 px-2 py-1.5">
+                      <dt className="text-slate-500">{label}</dt>
+                      <dd className="text-sm font-semibold text-slate-900">{value ?? 0}</dd>
                     </div>
-                    <div
-                      className="mt-1 h-2 overflow-hidden rounded-full bg-slate-100"
-                      role="progressbar"
-                      aria-valuemin={0}
-                      aria-valuemax={selectedJob.progress?.total ?? 0}
-                      aria-valuenow={selectedJob.progress?.processed ?? 0}
-                      aria-label="Job progress"
-                    >
-                      <div
-                        className="h-full rounded-full bg-indigo-500 transition-all"
-                        style={{
-                          width: `${Math.min(
-                            100,
-                            ((selectedJob.progress?.processed ?? 0) /
-                              Math.max(1, selectedJob.progress?.total ?? selectedJob.progress?.discovered ?? 0)) *
-                              100,
-                          )}%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  <dl className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
-                    {(
-                      [
-                        ['Pages crawled', selectedJob.stats?.pagesCrawled],
-                        ['Candidates', selectedJob.stats?.candidatesFound],
-                        ['AI calls', selectedJob.stats?.aiCalls],
-                        ['Errors', selectedJob.stats?.errors],
-                      ] as const
-                    ).map(([label, value]) => (
-                      <div key={label} className="rounded-lg bg-slate-50 px-2 py-1.5">
-                        <dt className="text-slate-500">{label}</dt>
-                        <dd className="text-sm font-semibold text-slate-900">{value ?? 0}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                </div>
+                  ))}
+                </dl>
+                </OperationCard>
 
                 <div className="rounded-xl border border-slate-200 bg-white p-4">
                   <h3 className="text-sm font-semibold text-slate-800">Stages</h3>
@@ -787,7 +812,7 @@ export default function LeadIntelligencePage() {
                         title={t.error ?? undefined}
                         className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${TASK_TONE[t.status]}`}
                       >
-                        {t.type.replace(/_/g, ' ')}
+                        {STAGE_LABELS[t.type] ?? t.type.replace(/_/g, ' ')}
                       </li>
                     ))}
                   </ul>
@@ -796,7 +821,9 @@ export default function LeadIntelligencePage() {
                   )}
                 </div>
 
-                {selectedJob.status === 'completed' && (
+                {(selectedJob.status === 'completed' ||
+                  researchOperationState(selectedJob as StoredOperation) ===
+                    'completed_with_warnings') && (
                   <button
                     type="button"
                     onClick={() => setTab('candidates')}

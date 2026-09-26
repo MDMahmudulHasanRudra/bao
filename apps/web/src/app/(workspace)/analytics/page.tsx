@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api } from '@/lib/api';
+import { errMsg } from '@/lib/errors';
 
 type SalesStats = {
   totalLeads: number;
@@ -28,10 +29,6 @@ type CompareResult = {
   note?: string;
   error?: string;
 };
-
-function errMsg(e: unknown) {
-  return e instanceof Error ? e.message : 'Request failed';
-}
 
 function Card({
   label,

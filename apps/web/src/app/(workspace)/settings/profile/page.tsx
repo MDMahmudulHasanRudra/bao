@@ -10,6 +10,8 @@ import {
   type FieldErrors,
   type SessionUser,
 } from '@/lib/api';
+import { errMsg } from '@/lib/errors';
+import SettingsPage from '@/components/settings/SettingsPage';
 
 type Form = {
   name: string;
@@ -21,6 +23,13 @@ type Form = {
 };
 
 const EMPTY: Form = { name: '', jobTitle: '', team: '', phone: '', timezone: '', bio: '' };
+
+/**
+ * The shell mounts children only when loading is false and there is no error,
+ * which is exactly when the profile has loaded. This keeps that guarantee in one
+ * named place instead of scattering `?.` and non-null assertions through markup.
+ */
+const NOT_LOADED: SessionUser = { name: '', username: '', avatarUrl: null } as SessionUser;
 
 function toForm(user: SessionUser): Form {
   return {
@@ -37,17 +46,13 @@ function fieldErrors(e: unknown): FieldErrors {
   return e instanceof ApiError ? e.fields : {};
 }
 
-function errMsg(e: unknown) {
-  return e instanceof Error ? e.message : 'Request failed';
-}
-
 const inputCls =
   'mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500';
 const labelCls = 'block text-xs font-medium text-slate-600';
 
 export default function ProfileSettingsPage() {
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [user, setUser] = useState<SessionUser | null>(null);
   const [form, setForm] = useState<Form>(EMPTY);
 
@@ -73,7 +78,7 @@ export default function ProfileSettingsPage() {
       setUser(res.user);
       setForm(toForm(res.user));
     } catch (e) {
-      setLoadError(errMsg(e));
+      setLoadError(e);
     } finally {
       setLoading(false);
     }
@@ -162,66 +167,32 @@ export default function ProfileSettingsPage() {
     }
   }
 
-  if (loading) {
-    return (
-      <div
-        role="status"
-        className="flex min-h-[40vh] items-center justify-center text-sm text-slate-500"
-      >
-        Loading your profile…
-      </div>
-    );
-  }
-
-  if (loadError || !user) {
-    return (
-      <div role="alert" className="mx-auto max-w-md rounded-xl border border-red-200 bg-white p-6">
-        <p className="text-sm text-slate-700">{loadError}</p>
-        <button
-          type="button"
-          onClick={() => void load()}
-          className="mt-4 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-        >
-          Retry
-        </button>
-      </div>
-    );
-  }
+  const base = user ? toForm(user) : EMPTY;
+  const dirty = (Object.keys(form) as (keyof Form)[]).some((k) => form[k] !== base[k]);
+  const me = user ?? NOT_LOADED;
 
   return (
-    <div className="mx-auto max-w-xl space-y-6">
-      <div>
-        <h1 className="text-lg font-semibold text-slate-900">My profile</h1>
-        <p className="text-sm text-slate-500">
-          Only your name is required. Everything else is optional.
-        </p>
-      </div>
-
-      {flash && (
-        <p
-          role={flash.ok ? 'status' : 'alert'}
-          className={`rounded-lg border px-3 py-2 text-sm ${
-            flash.ok
-              ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-              : 'border-red-200 bg-red-50 text-red-700'
-          }`}
-        >
-          {flash.text}
-        </p>
-      )}
-
+    <SettingsPage
+      title="My profile"
+      description="Only your name is required. Everything else is optional."
+      loading={loading}
+      error={loadError || (user ? null : 'Could not load your profile.')}
+      onRetry={() => void load()}
+      notice={flash}
+      dirty={dirty}
+    >
       <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-5">
         <div className="flex items-center gap-4">
           <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-indigo-100 text-lg font-semibold text-indigo-700">
-            {user.avatarUrl ? (
-              <img src={user.avatarUrl} alt="" className="h-full w-full object-cover" />
+            {me.avatarUrl ? (
+              <img src={me.avatarUrl} alt="" className="h-full w-full object-cover" />
             ) : (
-              (user.name || user.username || '?').slice(0, 1).toUpperCase()
+              (me.name || me.username || '?').slice(0, 1).toUpperCase()
             )}
           </div>
           <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-slate-900">{user.name}</p>
-            <p className="truncate text-xs text-slate-500">{user.username}</p>
+            <p className="truncate text-sm font-medium text-slate-900">{me.name}</p>
+            <p className="truncate text-xs text-slate-500">{me.username}</p>
             <label className="mt-2 inline-block cursor-pointer rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">
               {uploading ? 'Uploading…' : 'Change photo'}
               <input
@@ -379,7 +350,7 @@ export default function ProfileSettingsPage() {
         <h2 className="text-sm font-semibold text-slate-900">Username</h2>
         <div className="flex flex-wrap items-center gap-2">
           <code className="rounded-md bg-slate-100 px-2 py-0.5 text-sm text-slate-800">
-            {user.username}
+            {me.username}
           </code>
           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
             Sign-in ID
@@ -461,6 +432,6 @@ export default function ProfileSettingsPage() {
           {pwBusy ? 'Updating…' : 'Change password'}
         </button>
       </form>
-    </div>
+    </SettingsPage>
   );
 }

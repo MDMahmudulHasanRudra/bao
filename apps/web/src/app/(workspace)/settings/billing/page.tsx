@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api } from '@/lib/api';
+import SettingsPage from '@/components/settings/SettingsPage';
 
 type Plan = {
   id: string;
@@ -90,7 +91,7 @@ function Card({ children, className = '' }: { children: React.ReactNode; classNa
 
 export default function BillingPage() {
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   const [flash, setFlash] = useState<{ ok: boolean; text: string } | null>(null);
 
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -130,7 +131,7 @@ export default function BillingPage() {
       setInvoices(i.invoices);
       setPaymentMethods(pm.paymentMethods);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load billing');
+      setError(err);
     } finally {
       setLoading(false);
     }
@@ -247,29 +248,7 @@ export default function BillingPage() {
   }
 
   if (loading) {
-    return (
-      <div
-        role="status"
-        className="flex min-h-[40vh] items-center justify-center text-sm text-slate-500"
-      >
-        Loading billing…
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div role="alert" className="mx-auto max-w-3xl rounded-xl border border-red-200 bg-white p-6">
-        <p className="text-sm text-slate-700">{error}</p>
-        <button
-          type="button"
-          onClick={() => void load()}
-          className="mt-4 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-        >
-          Retry
-        </button>
-      </div>
-    );
+    return <SettingsPage title="Billing" loading />;
   }
 
   const hasSubscription = !!subscription;
@@ -281,14 +260,14 @@ export default function BillingPage() {
     : 0;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold text-slate-900">Billing</h1>
-          <p className="text-sm text-slate-500">
-            Manage your subscription, invoices, and payment methods.
-          </p>
-        </div>
+    <SettingsPage
+      title="Billing"
+      description="Manage your subscription, invoices, and payment methods."
+      width="wide"
+      error={error}
+      onRetry={() => void load()}
+      notice={flash}
+      action={
         <button
           type="button"
           onClick={() => void load()}
@@ -296,17 +275,8 @@ export default function BillingPage() {
         >
           Refresh
         </button>
-      </div>
-
-      {flash && (
-        <p
-          role={flash.ok ? 'status' : 'alert'}
-          className={`rounded-lg border px-3 py-2 text-sm ${flash.ok ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-700'}`}
-        >
-          {flash.text}
-        </p>
-      )}
-
+      }
+    >
       <section aria-label="Current plan">
         <h2 className="mb-3 text-sm font-semibold text-slate-800">Current Plan</h2>
         {hasSubscription ? (
@@ -705,6 +675,6 @@ export default function BillingPage() {
           </form>
         </Card>
       </section>
-    </div>
+    </SettingsPage>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api } from '@/lib/api';
+import { errMsg } from '@/lib/errors';
 
 type Target = {
   id: string;
@@ -26,10 +27,6 @@ type Event = {
 };
 
 type Tab = 'targets' | 'events';
-
-function errMsg(e: unknown) {
-  return e instanceof Error ? e.message : 'Request failed';
-}
 
 function relTime(iso: string) {
   const diff = Date.now() - new Date(iso).getTime();

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api } from '@/lib/api';
+import { errMsg } from '@/lib/errors';
 
 type Presentation = {
   id: string;
@@ -15,10 +16,6 @@ type Presentation = {
 };
 
 type Proposal = { id: string; title: string; status: string };
-
-function errMsg(e: unknown) {
-  return e instanceof Error ? e.message : 'Request failed';
-}
 
 const STATUS_BADGES: Record<string, { label: string; cls: string }> = {
   pending: { label: 'Pending', cls: 'bg-slate-100 text-slate-600' },

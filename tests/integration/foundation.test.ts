@@ -145,12 +145,21 @@ describe('knowledge status contract (P1-1)', () => {
   const pagePath = resolve(__dirname, '../../apps/web/src/app/(workspace)/knowledge/page.tsx');
 
   it('UI maps the real worker statuses: pending, processing, ready, error', () => {
-    const src = readFileSync(pagePath, 'utf-8');
+    // Spec 5 moved the mapping into the shared operation vocabulary, so the
+    // page now renders a badge from that component instead of a local map.
+    const page = readFileSync(pagePath, 'utf-8');
+    const shared = readFileSync(
+      resolve(__dirname, '../../apps/web/src/components/operations/OperationCard.tsx'),
+      'utf-8',
+    );
     for (const status of ['pending', 'processing', 'ready', 'error']) {
-      expect(src, `status map missing ${status}`).toMatch(
-        new RegExp(`${status}\\s*:\\s*\\{[^}]*label`),
-      );
+      expect(shared, `status map missing ${status}`).toMatch(new RegExp(`case '${status}':`));
     }
+    // Every state the mapper can return must carry a human label.
+    for (const state of ['queued', 'running', 'completed', 'failed']) {
+      expect(shared).toMatch(new RegExp(`\\n  ${state}: '`));
+    }
+    expect(page).toMatch(/OperationCard/);
   });
 
   it('UI handles empty, loading, error, and upload/URL/search affordances', () => {
@@ -335,11 +344,16 @@ describe('notifications producers + inbox UI (P1-5)', () => {
   });
 
   it('shell shows unread badge and nav entry for notifications', () => {
+    const nav = readFileSync(
+      resolve(__dirname, '../../apps/web/src/components/workspace-nav.ts'),
+      'utf-8',
+    );
+    expect(nav).toMatch(/href: '\/notifications'/);
     const src = readFileSync(layoutPath, 'utf-8');
-    expect(src).toMatch(/href: '\/notifications'/);
     expect(src).toMatch(/unreadCount/);
     expect(src).toMatch(/unread notifications/);
-    expect(src).toMatch(/NavIcon id=\{item\.moduleId\}/);
+    // iconId is separate from moduleId: several nav items can share one module.
+    expect(src).toMatch(/NavIcon id=\{item\.iconId\}/);
   });
 });
 
@@ -441,22 +455,27 @@ describe('audit visibility + AI run events (P1-6)', () => {
 
   it('audit UI has loading/unauthorized/error/empty + masked-details copy', () => {
     const src = readFileSync(auditPagePath, 'utf-8');
+    const shell = readFileSync(
+      resolve(__dirname, '../../apps/web/src/components/settings/SettingsPage.tsx'),
+      'utf-8',
+    );
     expect(src).toMatch(/\/api\/v1\/audit/);
-    expect(src).toMatch(/Loading audit log/);
-    expect(src).toMatch(/permission to view the audit log/);
-    expect(src).toMatch(/role="alert"/);
-    expect(src).toMatch(/Retry/);
+    expect(src).toMatch(/unauthorized=\{unauthorized\}/);
+    expect(src).toMatch(/error=\{error\}/);
+    expect(shell).toMatch(/role="alert"/);
+    expect(shell).toMatch(/Retry/);
+    expect(shell).toMatch(/do not have access to these settings/);
     expect(src).toMatch(/No audit events yet/);
     expect(src).toMatch(/secrets are masked/);
   });
 
   it('shell navigates to /settings/audit', () => {
-    const layout = readFileSync(
-      resolve(__dirname, '../../apps/web/src/app/(workspace)/layout.tsx'),
+    const nav = readFileSync(
+      resolve(__dirname, '../../apps/web/src/components/workspace-nav.ts'),
       'utf-8',
     );
-    expect(layout).toMatch(/href: '\/settings\/audit'/);
-    expect(layout).toMatch(/Audit Log/);
+    expect(nav).toMatch(/href: '\/settings\/audit'/);
+    expect(nav).toMatch(/Audit Log/);
   });
 });
 
@@ -669,9 +688,10 @@ describe('analytics + dashboard insight + Diffy + settings (P2-3)', () => {
     expect(page).toMatch(/settings\/integrations/);
     expect(page).toMatch(/Connected/);
     expect(page).toMatch(/Not configured/);
-    expect(page).toMatch(/role="alert"/);
+    expect(page).toMatch(/error=\{error\}/);
+    expect(page).toMatch(/onRetry=\{\(\) => void load\(\)\}/);
     const layout = readFileSync(
-      resolve(__dirname, '../../apps/web/src/app/(workspace)/layout.tsx'),
+      resolve(__dirname, '../../apps/web/src/components/workspace-nav.ts'),
       'utf-8',
     );
     expect(layout).toMatch(/\/settings\/integrations/);
@@ -744,9 +764,9 @@ describe('billing UI + API (Slice: Billing)', () => {
     expect(src).toMatch(/\/api\/v1\/billing\/subscription/);
     expect(src).toMatch(/\/api\/v1\/billing\/invoices/);
     expect(src).toMatch(/\/api\/v1\/billing\/payment-methods/);
-    expect(src).toMatch(/Loading billing/);
-    expect(src).toMatch(/role="alert"/);
-    expect(src).toMatch(/Retry/);
+    expect(src).toMatch(/<SettingsPage title="Billing" loading \/>/);
+    expect(src).toMatch(/error=\{error\}/);
+    expect(src).toMatch(/onRetry=\{\(\) => void load\(\)\}/);
     expect(src).toMatch(/No active subscription/);
     expect(src).toMatch(/No plans configured/);
     expect(src).toMatch(/No invoices yet/);
@@ -787,7 +807,7 @@ describe('billing UI + API (Slice: Billing)', () => {
 
   it('shell navigates to /settings/billing', () => {
     const layout = readFileSync(
-      resolve(__dirname, '../../apps/web/src/app/(workspace)/layout.tsx'),
+      resolve(__dirname, '../../apps/web/src/components/workspace-nav.ts'),
       'utf-8',
     );
     expect(layout).toMatch(/\/settings\/billing/);
@@ -845,7 +865,7 @@ describe('automation UI + API (Slice: Automation)', () => {
 
   it('shell navigates to /automation', () => {
     const layout = readFileSync(
-      resolve(__dirname, '../../apps/web/src/app/(workspace)/layout.tsx'),
+      resolve(__dirname, '../../apps/web/src/components/workspace-nav.ts'),
       'utf-8',
     );
     expect(layout).toMatch(/\/automation/);

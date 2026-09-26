@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import { errMsg } from '@/lib/errors';
 
 type Notification = {
   id: string;
@@ -26,10 +27,6 @@ const TYPE_BADGES: Record<string, string> = {
   'assistant.reply': 'bg-sky-100 text-sky-700',
   'proposal.approve': 'bg-amber-100 text-amber-800',
 };
-
-function errMsg(e: unknown) {
-  return e instanceof Error ? e.message : 'Request failed';
-}
 
 export default function NotificationsPage() {
   const [items, setItems] = useState<Notification[]>([]);

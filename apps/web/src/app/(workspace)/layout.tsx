@@ -14,6 +14,7 @@ import {
   type Membership,
   type SessionUser,
 } from '@/lib/api';
+import { DASHBOARD_ITEM, NAV_GROUPS, findNavItem, type NavItem } from '@/components/workspace-nav';
 
 const ICONS: Record<string, string[]> = {
   dashboard: ['M3 10.5 12 3l9 7.5V21a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1v-10.5z'],
@@ -88,31 +89,46 @@ function NavIcon({ id }: { id: string }) {
   );
 }
 
-const NAV = [
-  { href: '/dashboard', label: 'Dashboard', moduleId: 'dashboard' },
-  { href: '/knowledge', label: 'Knowledge Hub', moduleId: 'knowledge' },
-  { href: '/assistant', label: 'AI Assistant', moduleId: 'ai-assistant' },
-  { href: '/sales', label: 'Sales', moduleId: 'sales' },
-  { href: '/automation', label: 'Automation', moduleId: 'automation' },
-  { href: '/agent-marketplace', label: 'Agent Marketplace', moduleId: 'agent-marketplace' },
-  { href: '/revenue-analytics', label: 'Revenue Analytics', moduleId: 'revenue-analytics' },
-  { href: '/accounting', label: 'Accounting', moduleId: 'accounting' },
-  { href: '/workflow-builder', label: 'Workflow Builder', moduleId: 'workflow-builder' },
-  { href: '/notifications', label: 'Notifications', moduleId: 'notifications' },
-  { href: '/proposals', label: 'Proposals', moduleId: 'proposals' },
-  { href: '/presentations', label: 'Presentations', moduleId: 'presentations' },
-  { href: '/intelligence', label: 'Monitoring', moduleId: 'intelligence' },
-  { href: '/lead-intelligence', label: 'Lead Intelligence', moduleId: 'lead-intelligence' },
-  { href: '/analytics', label: 'Analytics', moduleId: 'analytics' },
-  { href: '/settings/profile', label: 'My Profile', moduleId: 'settings' },
-  { href: '/settings/ai-providers', label: 'AI Providers', moduleId: 'settings' },
-  { href: '/settings/integrations', label: 'Integrations', moduleId: 'settings' },
-  { href: '/settings/billing', label: 'Billing', moduleId: 'settings' },
-  { href: '/settings/members', label: 'Members', moduleId: 'settings' },
-  { href: '/settings/organization', label: 'Organization', moduleId: 'settings' },
-  { href: '/settings/white-label', label: 'White Label', moduleId: 'settings' },
-  { href: '/settings/audit', label: 'Audit Log', moduleId: 'settings' },
-];
+// One nav row. A module with no usable screen keeps its place in the list but is never
+// styled as active, so "Coming Soon" cannot be mistaken for a working page.
+function NavLink({
+  item,
+  pathname,
+  unread,
+  noUi,
+}: {
+  item: NavItem;
+  pathname: string;
+  unread: number;
+  noUi: boolean;
+}) {
+  const active = !noUi && (pathname === item.href || pathname.startsWith(`${item.href}/`));
+  return (
+    <Link
+      href={item.href}
+      aria-current={active ? 'page' : undefined}
+      className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${
+        active ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+      }`}
+    >
+      <NavIcon id={item.iconId} />
+      <span className="flex-1 truncate">{item.label}</span>
+      {item.badge === 'notifications' && unread > 0 && (
+        <span
+          className="rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-semibold text-white"
+          aria-label={`${unread} unread notifications`}
+        >
+          {unread > 99 ? '99+' : unread}
+        </span>
+      )}
+      {noUi && (
+        <span className="shrink-0 rounded bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-400">
+          Coming soon
+        </span>
+      )}
+    </Link>
+  );
+}
 
 type ModulesPayload = {
   modules: { id: string; name: string; uiAvailable?: boolean }[];
@@ -128,7 +144,9 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
   const [navOpen, setNavOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [comingSoon, setComingSoon] = useState<{ id: string; name: string }[]>([]);
-  const [uiAvailable, setUiAvailable] = useState<Record<string, boolean>>({});
+  // null until the registry answers. A failed request must not empty the sidebar, so
+  // "unknown" and "nothing enabled" are different states on purpose.
+  const [registry, setRegistry] = useState<Record<string, boolean> | null>(null);
   const [unread, setUnread] = useState(0);
   const [memberships, setMemberships] = useState<Membership[]>([]);
   const navRef = useRef<HTMLElement>(null);
@@ -213,14 +231,20 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
     api<ModulesPayload>('/api/v1/modules')
       .then((data) => {
         setComingSoon(data.comingSoon || []);
-        setUiAvailable(
+        setRegistry(
           Object.fromEntries((data.modules || []).map((m) => [m.id, m.uiAvailable !== false])),
         );
       })
       .catch(() => {
-        // Fallback: no badges, empty coming-soon — nav still works.
+        // Registry unavailable: show every module rather than an empty workspace.
+        setRegistry(null);
       });
   }, [router]);
+
+  // Absent from the registry means disabled for this tenant or role: hide it. Present but
+  // flagged means the module has no usable screen yet: keep it, but say so.
+  const moduleListed = (item: NavItem) => !registry || item.moduleId in registry;
+  const moduleHasUi = (item: NavItem) => !registry || registry[item.moduleId] !== false;
 
   if (!ready) {
     return (
@@ -301,39 +325,31 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
 
         <nav
           ref={navRef}
-          className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain px-2"
+          className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-2 py-1"
           aria-label="Primary"
         >
-          {NAV.map((item) => {
-            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-            const noUi = item.moduleId in uiAvailable && !uiAvailable[item.moduleId];
+          <NavLink item={DASHBOARD_ITEM} pathname={pathname} unread={unread} noUi={false} />
+          {NAV_GROUPS.map((group) => {
+            const items = group.items.filter(moduleListed);
+            if (items.length === 0) return null;
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                aria-current={active ? 'page' : undefined}
-                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${
-                  active
-                    ? 'bg-indigo-600 text-white'
-                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                }`}
-              >
-                <NavIcon id={item.moduleId} />
-                <span className="flex-1 truncate">{item.label}</span>
-                {item.moduleId === 'notifications' && unread > 0 && (
-                  <span
-                    className="rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-semibold text-white"
-                    aria-label={`${unread} unread notifications`}
-                  >
-                    {unread > 99 ? '99+' : unread}
-                  </span>
-                )}
-                {noUi && (
-                  <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-400">
-                    Soon
-                  </span>
-                )}
-              </Link>
+              <div key={group.id}>
+                <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  {group.label}
+                </p>
+                <ul className="space-y-1">
+                  {items.map((item) => (
+                    <li key={item.href}>
+                      <NavLink
+                        item={item}
+                        pathname={pathname}
+                        unread={unread}
+                        noUi={!moduleHasUi(item)}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </div>
             );
           })}
         </nav>
@@ -384,8 +400,7 @@ export default function WorkspaceLayout({ children }: { children: ReactNode }) {
               </svg>
             </button>
             <p className="truncate text-sm font-medium text-slate-600">
-              {NAV.find((n) => pathname === n.href || pathname.startsWith(`${n.href}/`))?.label ||
-                'Workspace'}
+              {findNavItem(pathname)?.label || 'Workspace'}
             </p>
           </div>
           <div className="flex items-center gap-3">

@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import { errMsg, isPermissionError } from '@/lib/errors';
+import SettingsPage from '@/components/settings/SettingsPage';
 
 type ProviderCard = {
   id: string;
@@ -35,31 +37,32 @@ type SettingsPayload = {
 
 type ModelOption = { id: string; capabilities: string[] };
 
+// D3: `chat_rag` also resolves lead/market research (adapter.ts), so one label
+// covers both purposes. No sixth capability was invented.
 const CAPABILITY_LABELS: Record<string, string> = {
-  chat_rag: 'Chat / RAG',
+  chat_rag: 'Chat, RAG & lead research',
   embeddings: 'Embeddings',
   proposal_draft: 'Proposal drafting',
   presentation_brief: 'Presentation brief',
-  evaluation: 'Evaluation',
+  evaluation: 'Evaluation / Diffy',
 };
 
-function isPermissionError(err: unknown): boolean {
-  return err instanceof Error && /Missing permission|Forbidden/i.test(err.message);
-}
+const capLabel = (cap: string) => CAPABILITY_LABELS[cap] ?? cap;
 
 export default function AiProvidersPage() {
   const [data, setData] = useState<SettingsPayload | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<unknown>(null);
   const [unauthorized, setUnauthorized] = useState(false);
 
-  // Connect form
-  const [selected, setSelected] = useState('');
+  // Connect wizard: null = closed, '' = open at step 1, otherwise the provider.
+  const [connectFor, setConnectFor] = useState<string | null>(null);
+  const [step, setStep] = useState(1);
   const [apiKey, setApiKey] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState('');
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   // Per-action busy + feedback
   const [busyId, setBusyId] = useState('');
@@ -79,18 +82,18 @@ export default function AiProvidersPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    setError('');
+    setError(null);
     setUnauthorized(false);
     try {
       const payload = await api<SettingsPayload>('/api/v1/ai-settings');
       setData(payload);
       const active = payload.providers.find((p) => p.status === 'active');
-      if (active && !defaultProvider) setDefaultProvider(active.provider);
+      setDefaultProvider((prev) => prev || active?.provider || '');
     } catch (err) {
       if (isPermissionError(err)) {
         setUnauthorized(true);
       } else {
-        setError(err instanceof Error ? err.message : 'Failed to load AI settings');
+        setError(err);
       }
     } finally {
       setLoading(false);
@@ -102,50 +105,65 @@ export default function AiProvidersPage() {
   }, [load]);
 
   const activeProviders = data?.providers.filter((p) => p.status === 'active') ?? [];
-  const def = data?.catalogue.find((c) => c.id === selected);
+  const def = data?.catalogue.find((c) => c.id === connectFor);
   const currentDefault = data?.defaults.find((d) => d.capability === defaultCap);
+  const capsFor = (id: string) =>
+    (data?.defaults ?? [])
+      .filter((d) => d.provider === id)
+      .map((d) => capLabel(d.capability));
 
+  function openWizard(provider?: string) {
+    setFormError('');
+    setTestResult(null);
+    setApiKey('');
+    setBaseUrl('');
+    setConnectFor(provider ?? '');
+    setStep(provider ? 2 : 1);
+  }
+
+  function closeWizard() {
+    setConnectFor(null);
+    setApiKey('');
+    setFormError('');
+    setTestResult(null);
+    setStep(1);
+  }
+
+  // Spec 4 step 3: the key must be stored before it can be tested, so this is
+  // save-then-test against the existing contract. No new endpoint is invented.
   async function connectProvider(e: React.FormEvent) {
     e.preventDefault();
     setFormError('');
-    setSaveSuccess('');
+    setTestResult(null);
     setSaving(true);
     try {
       await api('/api/v1/ai-settings', {
         method: 'POST',
-        body: {
-          provider: selected,
-          apiKey,
-          baseUrl: baseUrl || undefined,
-        },
+        body: { provider: connectFor, apiKey, baseUrl: baseUrl || undefined },
       });
       setApiKey('');
-      // Auto-verify after save
       const payload = await api<SettingsPayload>('/api/v1/ai-settings');
       setData(payload);
-      const created = payload.providers.find((p) => p.provider === selected);
-      if (created) {
+      const created = payload.providers.find((p) => p.provider === connectFor);
+      if (!created) {
+        setTestResult({ ok: false, message: 'Provider saved but not returned by the server.' });
+      } else {
         try {
-          const testRes = await api<{ result: { ok: boolean; message: string } }>(
+          const res = await api<{ result: { ok: boolean; message: string } }>(
             `/api/v1/ai-settings/${created.id}/test`,
             { method: 'POST' },
           );
-          const refreshed = await api<SettingsPayload>('/api/v1/ai-settings');
-          setData(refreshed);
-          setSaveSuccess(
-            testRes.result.ok
-              ? `Connected and verified: ${testRes.result.message}`
-              : `Saved, but verification failed: ${testRes.result.message}`,
-          );
-        } catch {
-          setSaveSuccess('Saved. Run “Test connection” to verify.');
+          setTestResult({ ok: res.result.ok, message: res.result.message });
+          setData(await api<SettingsPayload>('/api/v1/ai-settings'));
+        } catch (err) {
+          setTestResult({ ok: false, message: errMsg(err) });
         }
-      } else {
-        setSaveSuccess('Provider saved.');
       }
-      setDefaultProvider(selected);
+      // The provider just connected becomes the default; never blank a good one.
+      setDefaultProvider((prev) => connectFor || prev);
+      setStep(3);
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'Failed to save provider');
+      setFormError(errMsg(err));
     } finally {
       setSaving(false);
     }
@@ -181,7 +199,7 @@ export default function AiProvidersPage() {
       }
       setData(await api<SettingsPayload>('/api/v1/ai-settings'));
     } catch (err) {
-      setActionMsg({ id, ok: false, text: err instanceof Error ? err.message : 'Action failed' });
+      setActionMsg({ id, ok: false, text: errMsg(err) });
     } finally {
       setBusyId('');
     }
@@ -207,9 +225,9 @@ export default function AiProvidersPage() {
           else if (res.models[0]) setDefaultModel(res.models[0].id);
         }
       } catch (err) {
-        if (!cancelled) {
-          setModelsError(err instanceof Error ? err.message : 'Failed to load models');
-        }
+          if (!cancelled) {
+            setModelsError(errMsg(err));
+          }
       } finally {
         if (!cancelled) setModelsLoading(false);
       }
@@ -230,56 +248,25 @@ export default function AiProvidersPage() {
       setDefaultMsg({ ok: true, text: 'Default model saved.' });
       setData(await api<SettingsPayload>('/api/v1/ai-settings'));
     } catch (err) {
-      setDefaultMsg({ ok: false, text: err instanceof Error ? err.message : 'Save failed' });
+      setDefaultMsg({ ok: false, text: errMsg(err) });
     } finally {
       setSavingDefault(false);
     }
   }
 
-  if (loading) {
-    return <p className="text-sm text-slate-500">Loading AI settings…</p>;
-  }
-
-  if (unauthorized) {
-    return (
-      <div className="max-w-xl rounded-xl border border-amber-200 bg-amber-50 p-6">
-        <h1 className="text-lg font-semibold text-amber-900">AI Providers</h1>
-        <p className="mt-2 text-sm text-amber-800" role="alert">
-          You don’t have permission to view AI provider settings. Ask an owner or admin to update
-          them.
-        </p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="max-w-xl rounded-xl border border-rose-200 bg-rose-50 p-4">
-        <p className="text-sm text-rose-700" role="alert">
-          {error}
-        </p>
-        <button
-          type="button"
-          onClick={() => void load()}
-          className="mt-3 cursor-pointer rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-medium text-white transition-colors duration-200 hover:bg-rose-700"
-        >
-          Retry
-        </button>
-      </div>
-    );
-  }
-
-  const empty = !data || (data.providers.length === 0 && !selected);
+  const empty = !data || data.providers.length === 0;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900">AI Providers</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Connect an approved provider. Keys are encrypted on the server and never shown again.
-        </p>
-      </div>
-
+    <SettingsPage
+      title="AI Providers & Models"
+      description="Connect an approved provider. Keys are encrypted on the server and never shown again."
+      width="wide"
+      loading={loading}
+      error={error}
+      onRetry={() => void load()}
+      unauthorized={unauthorized}
+    >
+      <div className="space-y-8">
       {/* Provider cards */}
       {empty ? (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
@@ -290,7 +277,7 @@ export default function AiProvidersPage() {
           </p>
           <button
             type="button"
-            onClick={() => setSelected(selected || 'openai')}
+            onClick={() => openWizard()}
             className="mt-4 cursor-pointer rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-indigo-700"
           >
             Connect a provider
@@ -334,6 +321,11 @@ export default function AiProvidersPage() {
                       : 'Not tested yet'}
                   </p>
                 )}
+                {capsFor(cat.id).length > 0 && (
+                  <p className="mt-1 text-xs text-slate-500">
+                    Selected for: {capsFor(cat.id).join(', ')}
+                  </p>
+                )}
                 {actionMsg && row && actionMsg.id === row.id && (
                   <p
                     className={`mt-2 text-xs ${actionMsg.ok ? 'text-emerald-700' : 'text-rose-700'}`}
@@ -346,12 +338,7 @@ export default function AiProvidersPage() {
                   {!row && (
                     <button
                       type="button"
-                      onClick={() => {
-                        setSelected(cat.id);
-                        document.getElementById('connect-form')?.scrollIntoView({
-                          behavior: 'smooth',
-                        });
-                      }}
+                      onClick={() => openWizard(cat.id)}
                       className="cursor-pointer rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition-colors duration-200 hover:bg-indigo-700"
                     >
                       Connect
@@ -402,101 +389,199 @@ export default function AiProvidersPage() {
         </ul>
       )}
 
-      {/* Connect form */}
-      <section
-        id="connect-form"
-        className="rounded-xl border border-slate-200 bg-white p-5"
-        aria-labelledby="connect-heading"
-      >
-        <h2 id="connect-heading" className="text-sm font-semibold text-slate-900">
-          Connect or replace a provider key
-        </h2>
-        <p className="mt-1 text-xs text-slate-500">
-          Your key is sent only to this server over TLS, encrypted at rest, and never rendered
-          again. Privacy: requests go directly from this server to the provider you choose.
-        </p>
-        <form onSubmit={(e) => void connectProvider(e)} className="mt-4 space-y-4">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      {/* Spec 4 step 3: connect wizard. Opens on demand, one step at a time. */}
+      {connectFor !== null && (
+        <section
+          id="connect-form"
+          className="rounded-xl border border-slate-200 bg-white p-5"
+          aria-labelledby="connect-heading"
+        >
+          <div className="flex items-start justify-between gap-3">
             <div>
-              <label htmlFor="provider" className="block text-xs font-medium text-slate-700">
-                Provider
-              </label>
-              <select
-                id="provider"
-                value={selected}
-                onChange={(e) => setSelected(e.target.value)}
-                required
-                className="mt-1 w-full cursor-pointer rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-              >
-                <option value="">Select a provider…</option>
-                {(data?.catalogue ?? []).map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+              <h2 id="connect-heading" className="text-sm font-semibold text-slate-900">
+                Connect a provider
+              </h2>
+              <p className="mt-1 text-xs text-slate-500">
+                Your key is sent only to this server over TLS, encrypted at rest, and never rendered
+                again. Privacy: requests go directly from this server to the provider you choose.
+              </p>
             </div>
-            <div>
-              <label htmlFor="apikey" className="block text-xs font-medium text-slate-700">
-                API key
-              </label>
-              <input
-                id="apikey"
-                type="password"
-                autoComplete="off"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                required
-                minLength={8}
-                placeholder={def?.keyHint || 'Paste your API key'}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-              />
-            </div>
+            <button
+              type="button"
+              onClick={closeWizard}
+              className="shrink-0 cursor-pointer rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors duration-200 hover:bg-slate-50"
+            >
+              Cancel
+            </button>
           </div>
-          {def?.requireBaseUrl && (
-            <div>
-              <label htmlFor="baseurl" className="block text-xs font-medium text-slate-700">
-                Base URL (HTTPS, include /v1)
-              </label>
-              <input
-                id="baseurl"
-                type="url"
-                value={baseUrl}
-                onChange={(e) => setBaseUrl(e.target.value)}
-                required
-                placeholder="https://your-endpoint.example.com/v1"
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-              />
+
+          <ol className="mt-3 flex flex-wrap gap-2 text-xs">
+            {['Choose provider', 'Enter key', 'Test connection', 'Choose models'].map((label, i) => (
+              <li
+                key={label}
+                aria-current={step === i + 1 ? 'step' : undefined}
+                className={`rounded-full px-2.5 py-1 ${
+                  step === i + 1
+                    ? 'bg-indigo-600 text-white'
+                    : step > i + 1
+                      ? 'bg-emerald-50 text-emerald-700'
+                      : 'bg-slate-100 text-slate-500'
+                }`}
+              >
+                {i + 1}. {label}
+              </li>
+            ))}
+          </ol>
+
+          {step === 1 && (
+            <fieldset className="mt-4">
+              <legend className="text-xs font-medium text-slate-700">Which provider?</legend>
+              <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {(data?.catalogue ?? []).map((c) => (
+                  <label
+                    key={c.id}
+                    className="flex cursor-pointer items-start gap-2 rounded-lg border border-slate-200 p-3 transition-colors duration-200 hover:bg-slate-50"
+                  >
+                    <input
+                      type="radio"
+                      name="wizard-provider"
+                      value={c.id}
+                      checked={connectFor === c.id}
+                      onChange={() => setConnectFor(c.id)}
+                      className="mt-0.5"
+                    />
+                    <span>
+                      <span className="block text-sm font-medium text-slate-900">{c.name}</span>
+                      <span className="block text-xs text-slate-500">{c.keyHint}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <button
+                type="button"
+                disabled={!connectFor}
+                onClick={() => setStep(2)}
+                className="mt-4 cursor-pointer rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Next: enter key
+              </button>
+            </fieldset>
+          )}
+
+          {step === 2 && def && (
+            <form onSubmit={(e) => void connectProvider(e)} className="mt-4 space-y-4">
+              <p className="text-xs text-slate-500">
+                Connecting <strong>{def.name}</strong>. Expected format:{' '}
+                <code className="rounded bg-slate-100 px-1">{def.keyHint}</code>
+              </p>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="apikey" className="block text-xs font-medium text-slate-700">
+                    API key
+                  </label>
+                  <input
+                    id="apikey"
+                    type="password"
+                    autoComplete="off"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    required
+                    minLength={8}
+                    placeholder={def.keyHint}
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+                {def.requireBaseUrl && (
+                  <div>
+                    <label htmlFor="baseurl" className="block text-xs font-medium text-slate-700">
+                      Base URL (HTTPS, include /v1)
+                    </label>
+                    <input
+                      id="baseurl"
+                      type="url"
+                      value={baseUrl}
+                      onChange={(e) => setBaseUrl(e.target.value)}
+                      required
+                      placeholder="https://your-endpoint.example.com/v1"
+                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+                )}
+              </div>
+              {formError && (
+                <p className="text-sm text-rose-600" role="alert">
+                  {formError}
+                </p>
+              )}
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="cursor-pointer rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {saving ? 'Saving and testing…' : 'Save and test connection'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStep(1)}
+                  className="cursor-pointer rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition-colors duration-200 hover:bg-slate-50"
+                >
+                  Back
+                </button>
+              </div>
+            </form>
+          )}
+
+          {step === 3 && (
+            <div className="mt-4 space-y-3">
+              {saving ? (
+                <p className="text-sm text-slate-500" role="status">
+                  Testing connection…
+                </p>
+              ) : testResult ? (
+                <p
+                  className={`text-sm ${testResult.ok ? 'text-emerald-700' : 'text-rose-600'}`}
+                  role={testResult.ok ? 'status' : 'alert'}
+                >
+                  {testResult.ok
+                    ? `Connected. ${testResult.message}`
+                    : `Saved, but the connection test failed: ${testResult.message}`}
+                </p>
+              ) : null}
+              <p className="text-xs text-slate-500">
+                The key is now stored encrypted and is never shown again. Next, choose which model
+                handles each task.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeWizard();
+                    document
+                      .getElementById('capability-defaults')
+                      ?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  className="cursor-pointer rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-indigo-700"
+                >
+                  Choose models
+                </button>
+                <button
+                  type="button"
+                  onClick={closeWizard}
+                  className="cursor-pointer rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition-colors duration-200 hover:bg-slate-50"
+                >
+                  Done
+                </button>
+              </div>
             </div>
           )}
-          {def && (
-            <p className="text-xs text-slate-500">
-              Expected format: <code className="rounded bg-slate-100 px-1">{def.keyHint}</code>
-            </p>
-          )}
-          {formError && (
-            <p className="text-sm text-rose-600" role="alert">
-              {formError}
-            </p>
-          )}
-          {saveSuccess && (
-            <p className="text-sm text-emerald-700" role="status">
-              {saveSuccess}
-            </p>
-          )}
-          <button
-            type="submit"
-            disabled={saving || !selected}
-            className="cursor-pointer rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {saving ? 'Saving & verifying…' : 'Save & verify'}
-          </button>
-        </form>
-      </section>
+        </section>
+      )}
 
       {/* Capability defaults */}
       {activeProviders.length > 0 && (
         <section
+          id="capability-defaults"
           className="rounded-xl border border-slate-200 bg-white p-5"
           aria-labelledby="defaults-heading"
         >
@@ -506,6 +591,39 @@ export default function AiProvidersPage() {
           <p className="mt-1 text-xs text-slate-500">
             Each business capability resolves to one default model on an enabled provider.
           </p>
+
+          {/* Spec 4 step 3: assigned models, and what happens if one is gone. */}
+          <ul className="mt-4 space-y-1.5 text-xs text-slate-700">
+            {(data?.capabilities ?? []).map((cap) => {
+              const row = (data?.defaults ?? []).find((d) => d.capability === cap);
+              const providerActive = row
+                ? activeProviders.some((p) => p.provider === row.provider)
+                : false;
+              return (
+                <li key={cap} className="flex flex-wrap gap-x-2">
+                  <span className="font-medium">{capLabel(cap)}:</span>
+                  {row ? (
+                    <span>
+                      {row.modelId} · {row.provider}
+                      {!providerActive && (
+                        <span className="text-amber-700">
+                          {' '}
+                          — provider is not enabled, so features that need it will show a safe
+                          &ldquo;provider not available&rdquo; error instead of sending data
+                          anywhere
+                        </span>
+                      )}
+                    </span>
+                  ) : (
+                    <span className="text-amber-700">
+                      not set — features that need it will show a safe &ldquo;no provider
+                      configured&rdquo; error and send nothing anywhere
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
 
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div>
@@ -520,7 +638,7 @@ export default function AiProvidersPage() {
               >
                 {(data?.capabilities ?? []).map((cap) => (
                   <option key={cap} value={cap}>
-                    {CAPABILITY_LABELS[cap] ?? cap}
+                    {capLabel(cap)}
                   </option>
                 ))}
               </select>
@@ -573,8 +691,8 @@ export default function AiProvidersPage() {
           )}
           {!modelsLoading && models.length === 0 && !modelsError && (
             <p className="mt-3 text-sm text-slate-500">
-              No compatible {CAPABILITY_LABELS[defaultCap] ?? defaultCap} model on this provider.
-              Try another provider or capability.
+              No compatible {capLabel(defaultCap)} model on this provider. Try another provider or
+              capability.
             </p>
           )}
           {currentDefault && (
@@ -600,6 +718,7 @@ export default function AiProvidersPage() {
           </button>
         </section>
       )}
-    </div>
+      </div>
+    </SettingsPage>
   );
 }

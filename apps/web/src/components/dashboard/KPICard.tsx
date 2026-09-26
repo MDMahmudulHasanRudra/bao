@@ -111,15 +111,17 @@ export function KPICard({
         )}
       </div>
 
-      {(trend || trendValue) && (
+      {/* A trend is only rendered when the caller passed a real number. Spec 7
+          forbids inventing a change that no endpoint measured. */}
+      {trendValue && (
         <div className="mt-3 flex items-center gap-1.5">
           <span
             className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${TREND_COLORS[trend]}`}
           >
             {TREND_ICONS[trend]}
-            {trendValue || (trend === 'up' ? '+12%' : trend === 'down' ? '-8%' : '—')}
+            {trendValue}
           </span>
-          <span className="text-[11px] text-slate-500">vs last period</span>
+          <span className="text-[11px] text-slate-500">vs previous period</span>
         </div>
       )}
     </div>

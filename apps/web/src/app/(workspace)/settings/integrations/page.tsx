@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import SettingsPage from '@/components/settings/SettingsPage';
 
 type Integration = {
   id: string;
@@ -16,16 +17,16 @@ type Integration = {
 export default function IntegrationsPage() {
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<unknown>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
-    setError('');
+    setError(null);
     try {
       const res = await api<{ integrations: Integration[] }>('/api/v1/settings/integrations');
       setIntegrations(res.integrations || []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load integrations');
+      setError(err);
     } finally {
       setLoading(false);
     }
@@ -36,38 +37,19 @@ export default function IntegrationsPage() {
   }, [load]);
 
   if (loading) {
-    return <p className="text-sm text-slate-500">Loading integrations…</p>;
-  }
-
-  if (error) {
-    return (
-      <div className="max-w-xl rounded-xl border border-rose-200 bg-rose-50 p-4">
-        <p className="text-sm text-rose-700" role="alert">
-          {error}
-        </p>
-        <button
-          type="button"
-          onClick={() => void load()}
-          className="mt-3 cursor-pointer rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-medium text-white transition-colors duration-200 hover:bg-rose-700"
-        >
-          Retry
-        </button>
-      </div>
-    );
+    return <SettingsPage title="Integrations" loading />;
   }
 
   const readyCount = integrations.filter((i) => i.configured).length;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900">Integrations</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          {readyCount} of {integrations.length} configured. Environment keys are set by the
-          operator; AI provider keys are managed per workspace.
-        </p>
-      </div>
-
+    <SettingsPage
+      title="Integrations"
+      width="wide"
+      error={error}
+      onRetry={() => void load()}
+      description={`${readyCount} of ${integrations.length} configured. Environment keys are set by the operator; AI provider keys are managed per workspace.`}
+    >
       <ul className="space-y-3">
         {integrations.map((int) => (
           <li
@@ -101,6 +83,6 @@ export default function IntegrationsPage() {
           </li>
         ))}
       </ul>
-    </div>
+    </SettingsPage>
   );
 }

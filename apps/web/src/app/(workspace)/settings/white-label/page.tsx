@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
+import { errMsg } from '@/lib/errors';
+import SettingsPage from '@/components/settings/SettingsPage';
 
 const FONTS = [
   {
@@ -65,10 +67,6 @@ type AssetType = 'logo' | 'favicon' | 'loginBackground';
 const assetKey = (type: AssetType): keyof Assets =>
   type === 'logo' ? 'logoUrl' : type === 'favicon' ? 'faviconUrl' : 'loginBackgroundUrl';
 
-function errMsg(e: unknown) {
-  return e instanceof Error ? e.message : 'Request failed';
-}
-
 function fontStack(value: string) {
   return FONTS.find((f) => f.value === value)?.stack ?? FONTS[0].stack;
 }
@@ -97,12 +95,13 @@ const label = 'block text-sm font-medium text-slate-700';
 
 export default function WhiteLabelSettingsPage() {
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [flash, setFlash] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState<string | null>(null);
   const [form, setForm] = useState<Form>(EMPTY);
+  const [initial, setInitial] = useState<Form>(EMPTY);
   const [assets, setAssets] = useState<Assets>(NO_ASSETS);
   const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
 
@@ -115,7 +114,7 @@ export default function WhiteLabelSettingsPage() {
       );
       setAssets({ ...NO_ASSETS, ...(res.assets ?? NO_ASSETS) });
       const s = res.settings ?? {};
-      setForm({
+      const next: Form = {
         productName: s.productName ?? '',
         tagline: s.tagline ?? '',
         primaryColor: s.primaryColor || DEFAULTS.primaryColor,
@@ -126,9 +125,11 @@ export default function WhiteLabelSettingsPage() {
         emailReplyTo: s.emailReplyTo ?? '',
         termsUrl: s.termsUrl ?? '',
         privacyUrl: s.privacyUrl ?? '',
-      });
+      };
+      setForm(next);
+      setInitial(next);
     } catch (err) {
-      setError(errMsg(err));
+      setError(err);
     } finally {
       setLoading(false);
     }
@@ -198,16 +199,8 @@ export default function WhiteLabelSettingsPage() {
   const primary = form.primaryColor || DEFAULTS.primaryColor;
   const gradient = `linear-gradient(135deg, ${primary}, ${form.secondaryColor || DEFAULTS.secondaryColor})`;
 
-  if (loading) return <p className="p-8 text-sm text-slate-500">Loading white label settings…</p>;
-  if (error) {
-    return (
-      <div className="p-8">
-        <p role="alert" className="text-sm text-red-600">
-          {error}
-        </p>
-      </div>
-    );
-  }
+  // Loading and failure are the shell's job: it renders them with the support
+  // reference. Returning early here would bypass both that and the retry button.
 
   const assetRow = (
     type: 'logo' | 'favicon' | 'loginBackground',
@@ -265,15 +258,19 @@ export default function WhiteLabelSettingsPage() {
     </div>
   );
 
+  const dirty = (Object.keys(form) as (keyof Form)[]).some((k) => form[k] !== initial[k]);
+
   return (
-    <div className="space-y-6 p-6">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900">White Label</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Rebrand the login page and outbound email identity for your workspace.
-          </p>
-        </div>
+    <SettingsPage
+      title="White Label"
+      description="Rebrand the login page and outbound email identity for your workspace."
+      width="wide"
+      loading={loading}
+      error={error}
+      onRetry={() => void load()}
+      notice={flash}
+      dirty={dirty}
+      action={
         <button
           type="button"
           onClick={() => void save()}
@@ -282,13 +279,8 @@ export default function WhiteLabelSettingsPage() {
         >
           {busy ? 'Saving…' : 'Save changes'}
         </button>
-      </header>
-
-      {flash && (
-        <p role="status" className={flash.ok ? 'text-sm text-emerald-600' : 'text-sm text-red-600'}>
-          {flash.text}
-        </p>
-      )}
+      }
+    >
       {fieldError && (
         <p role="alert" className="text-sm text-red-600">
           {fieldError}
@@ -556,6 +548,6 @@ export default function WhiteLabelSettingsPage() {
           </div>
         </div>
       </Section>
-    </div>
+    </SettingsPage>
   );
 }

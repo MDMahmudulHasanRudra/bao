@@ -105,10 +105,14 @@ export function updateSessionUser(patch: Partial<SessionUser>) {
 export type FieldErrors = Record<string, string>;
 
 // Field-level messages come back on error.details, not error.message.
+// status lets callers branch on 401/403/409 without matching message text;
+// correlationId is the API's request id for support/debugging.
 export class ApiError extends Error {
   constructor(
     message: string,
     readonly fields: FieldErrors = {},
+    readonly status: number = 0,
+    readonly correlationId?: string,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -139,11 +143,20 @@ export async function api<T>(
           : JSON.stringify(options.body),
   });
   const data = (await res.json().catch(() => ({}))) as T & {
-    error?: { message?: string; details?: Record<string, string> };
+    error?: {
+      message?: string;
+      details?: Record<string, string>;
+      correlationId?: string;
+    };
   };
   if (!res.ok) {
     if (res.status === 401 && options.auth !== false) clearSession();
-    throw new ApiError(data?.error?.message || `Request failed (${res.status})`, data?.error?.details || {});
+    throw new ApiError(
+      data?.error?.message || `Request failed (${res.status})`,
+      data?.error?.details || {},
+      res.status,
+      data?.error?.correlationId || res.headers.get('x-correlation-id') || undefined,
+    );
   }
   return data;
 }
